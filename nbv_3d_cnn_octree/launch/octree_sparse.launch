@@ -1,0 +1,91 @@
+<launch>
+
+  <!-- enc_dec sparse_enc_dec resnet sparse_resnet -->
+  <arg name="model_type" default="sparse_enc_dec" />
+  <arg name="outdir" default="test" />
+  <!-- engines: pytorch minkowski -->
+  <arg name="engine" default="pytorch" />
+  <arg name="unified_loss" default="false" />
+
+  <arg name="model_type_is_sparse_resnet" value="$(eval arg('model_type') == 'sparse_resnet')" />
+  <arg name="model_type_is_resnet" value="$(eval arg('model_type') == 'resnet')" />
+  <arg name="model_type_is_sparse_enc_dec" value="$(eval arg('model_type') == 'sparse_enc_dec')" />
+  <arg name="model_type_is_enc_dec" value="$(eval arg('model_type') == 'enc_dec')" />
+
+  <node name="nbv_3d_cnn_octree_sparse" type="octree_sparse_pytorch.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="training_with_unified_loss" type="bool" value="$(arg unified_loss)" />
+    <param name="unified_loss_alpha" type="double" value="0.9" />
+    <param name="mse_leak" type="double" value="0.0" />
+    <param name="logit_leak" type="double" value="0.5" />
+
+    
+    <param name="load_checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_st_loss_pytorch/chkpt_$(arg model_type)_final_model.pt"  if="$(eval arg('model_type_is_sparse_enc_dec') and arg('unified_loss') and arg('engine') == 'pytorch')" />
+    <param name="load_checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_st_loss_minkowski/chkpt_$(arg model_type)_final_model.pt"  if="$(eval arg('model_type_is_sparse_enc_dec') and arg('unified_loss') and arg('engine') == 'minkowski')" />
+    <param name="load_checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_resnet_st_loss_pytorch/chkpt_$(arg model_type)_final_model.pt"  if="$(eval arg('model_type_is_sparse_resnet') and arg('unified_loss') and arg('engine') == 'pytorch')" />
+    <param name="load_checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_resnet_st_loss_minkowski/chkpt_$(arg model_type)_final_model.pt"  if="$(eval arg('model_type_is_sparse_resnet') and arg('unified_loss') and arg('engine') == 'minkowski')" />
+    <param name="load_checkpoint_file" type="string" value="" unless="$(eval arg('unified_loss'))" />
+
+    <param name="tensorboard_dir" type="string" value="$(find nbv_3d_cnn_octree)/data/tensorboard" />
+
+    <param name="input_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+
+    <param name="test_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/$(arg outdir)/" />
+
+    <param name="log_file_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/logs/train_" />
+
+    <param name="checkpoint_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/$(arg outdir)/chkpt_" />
+
+    <param name="batch_size" type="int" value="1" />
+
+    <param name="initial_epoch" type="int" value="0" />
+
+    <param name="crop_image" type="string" value="1250 1250" />
+
+    <param name="last_train_image" type="int" value="120" />
+
+    <param name="resblock_num" type="int" value="3" />
+
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="max_channels" type="int" value="32" if="$(eval arg('model_type_is_enc_dec') or arg('model_type_is_sparse_enc_dec'))" />
+    <param name="max_channels" type="int" value="16" if="$(eval arg('model_type_is_resnet') or arg('model_type_is_sparse_resnet'))" />
+ 
+    <param name="model_type" type="string" value="$(arg model_type)" />
+    <!-- -->
+    <param name="learning_rate" type="double" value="0.0001" if="$(arg model_type_is_enc_dec)" />
+    <param name="last_learning_rate" type="double" value="0.0001" if="$(arg model_type_is_enc_dec)" />
+    <param name="num_epochs" type="int" value="360" if="$(arg model_type_is_enc_dec)" />
+    <param name="base_channels" type="int" value="4" if="$(arg model_type_is_enc_dec)" />
+    <param name="test_every_iter" type="int" value="20" if="$(arg model_type_is_enc_dec)" />
+    <!-- -->
+    <param name="learning_rate" type="double" value="0.0001" if="$(arg model_type_is_sparse_enc_dec)" />
+    <param name="last_learning_rate" type="double" value="0.0001" if="$(arg model_type_is_sparse_enc_dec)" />
+    <param name="num_epochs" type="int" value="360" if="$(arg model_type_is_sparse_enc_dec)" />
+    <param name="base_channels" type="int" value="4" if="$(arg model_type_is_sparse_enc_dec)" />
+    <param name="weight_decay" type="double" value="0.000001" if="$(eval arg('model_type_is_sparse_enc_dec') and arg('unified_loss'))" />
+    <param name="test_every_iter" type="int" value="30" if="$(arg model_type_is_sparse_enc_dec)" />
+    <!-- -->
+    <param name="learning_rate" type="double" value="0.0005" if="$(arg model_type_is_resnet)" />
+    <param name="last_learning_rate" type="double" value="0.0005" if="$(arg model_type_is_resnet)" />
+    <param name="num_epochs" type="int" value="360" if="$(arg model_type_is_resnet)" />
+    <param name="base_channels" type="int" value="4" if="$(arg model_type_is_resnet)" />
+    <param name="test_every_iter" type="int" value="30" if="$(arg model_type_is_resnet)" />
+    <!-- -->
+    <param name="learning_rate" type="double" value="0.0005" if="$(arg model_type_is_sparse_resnet)" />
+    <param name="last_learning_rate" type="double" value="0.0005" if="$(arg model_type_is_sparse_resnet)" />
+    <param name="num_epochs" type="int" value="360" if="$(arg model_type_is_sparse_resnet)" />
+    <param name="base_channels" type="int" value="4" if="$(arg model_type_is_sparse_resnet)" />
+    <param name="test_every_iter" type="int" value="30" if="$(arg model_type_is_sparse_resnet)" />
+    <param name="weight_decay" type="double" value="0.000001" if="$(eval arg('model_type_is_sparse_resnet') and arg('unified_loss'))" />
+    <!-- -->
+
+    <param name="max_levels" type="int" value="6" />
+
+    <param name="max_memory_mb" type="int" value="10000" />
+
+    <param name="engine" type="string" value="$(arg engine)" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+
+</launch>

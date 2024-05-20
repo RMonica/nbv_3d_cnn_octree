@@ -1,0 +1,22 @@
+<launch>
+
+  <!--<arg name="iter" value="20" />-->
+  <!--<arg name="iter" value="final" />-->
+  <arg name="iter" value="40" />
+  <arg name="model_type" value="sparse_resnet" />
+
+  <node name="octree_to_image" type="octree_to_image" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="source_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/test/$(arg model_type)_$(arg iter)_" />
+    <param name="source_suffix" type="string" value="_output_test" />
+
+    <param name="dest_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/test/$(arg model_type)_$(arg iter)_" />
+    <param name="dest_suffix" type="string" value="_reconst" />
+
+    <param name="first_counter" type="int" value="120" />
+
+    <param name="crop_x" type="int" value="250" />
+    <param name="crop_y" type="int" value="250" />
+  </node>
+
+</launch>

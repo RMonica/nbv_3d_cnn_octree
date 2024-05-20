@@ -1,0 +1,12 @@
+uint64[] sizes # (y, x) or (z, y, x)
+
+float32[] empty
+float32[] frontier
+float32[] uninteresting
+---
+float32[] image_scores
+
+float32 prediction_time
+uint64 total_output_values
+float32 memory_allocated
+---

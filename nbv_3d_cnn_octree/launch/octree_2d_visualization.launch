@@ -1,0 +1,74 @@
+<launch>
+
+  <node name="octree_to_visualization_msgs" type="octree_to_visualization_msgs" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <!--<param name="color_mode" type="string" value="voxel_size" />-->
+    <!--<param name="color_mode" type="string" value="intensity" />-->
+    <!--<param name="color_mode" type="string" value="fixed" />-->
+    <!--<param name="color_mode" type="string" value="voxel_size_intensity" />-->
+
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/179_input_octree.octree" />
+    <param name="color_mode" type="string" value="intensity_ch2_to_red" />
+    <param name="color1" type="string" value="1 1 1" />
+    <param name="color2" type="string" value="1 0 0" />
+    <param name="voxel_removal_threshold" type="double" value="-0.0001" />
+    
+
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/test/sparse_enc_dec_final_179_output_merged.octree" />
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_leak05_a09_pytorch/sparse_enc_dec_final_179_output_merged.octree" />-->
+<!--
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_st_loss_pytorch/sparse_enc_dec_final_179_output_merged.octree" />
+    <param name="color_mode" type="string" value="intensity" />
+    <param name="color1" type="string" value="0 0 1" />
+    <param name="color2" type="string" value="0 0 0" />
+    <param name="voxel_removal_threshold" type="double" value="-0.0001" />
+-->
+
+    <param name="color_mode" type="string" value="intensity" />
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/179_gt_octree.octree" />
+    <param name="color1" type="string" value="1 0 0" />
+    <param name="color2" type="string" value="1 1 1" />
+    <param name="voxel_removal_threshold" type="double" value="-0.001" />
+
+    <param name="z_offset" type="double" value="-0.1" />
+
+    <param name="channel" type="int" value="1" />-->
+    <param name="channel" type="int" value="0" />
+
+    <param name="image_crop_2d" type="string" value="1250 1250" />
+    <param name="image_crop_3d" type="string" value="128 128 92" />
+
+    <param name="dest_topic" type="string" value="/octree_visualization" />
+
+    <!--<param name="negative" type="bool" value="false" />-->
+
+    <!--<param name="intensity_range" type="double" value="0.7" />-->
+
+    <!--<param name="with_size_border_color" type="bool" value="true" />-->
+  </node>
+
+  <node name="octree_to_visualization_msgs3" type="octree_to_visualization_msgs" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="color_mode" type="string" value="intensity_ch2_to_red" />
+    <param name="color1" type="string" value="1 1 1" />
+    <param name="color2" type="string" value="1 0 0" />
+
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/179_input_octree.octree" />
+
+    <param name="channel" type="int" value="0" />
+
+    <param name="image_crop_2d" type="string" value="1250 1250" />
+    <param name="image_crop_3d" type="string" value="128 128 92" />
+
+    <param name="dest_topic" type="string" value="/octree_visualization3" />
+
+    <!--<param name="voxel_removal_threshold" type="double" value="-0.0001" />-->
+    <param name="voxel_removal_threshold" type="double" value="0.1" />-->
+    <param name="negative" type="bool" value="false" />
+
+    <!--<param name="intensity_range" type="double" value="0.7" />-->
+
+    <!--<param name="with_size_border_color" type="bool" value="true" />-->
+  </node>
+
+</launch>

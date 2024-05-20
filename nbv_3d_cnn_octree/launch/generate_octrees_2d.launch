@@ -1,0 +1,11 @@
+<launch>
+
+  <node name="image_to_octree" type="image_to_octree" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+    <param name="source_prefix" type="string" value="$(find nbv_3d_cnn)/data/inria_environments/" />
+
+    <param name="dest_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+
+    <param name="max_levels" type="int" value="6" />
+  </node>
+
+</launch>

@@ -1,0 +1,80 @@
+<launch>
+
+  <!-- enc_dec sparse_enc_dec resnet sparse_resnet -->
+  <arg name="model_type" default="sparse_resnet" />
+  <arg name="is_3d" default="true" />
+  <!-- engines: pytorch minkowski -->
+  <arg name="engine" default="minkowski" />
+  <arg name="unified_loss" default="true" />
+  <arg name="dry_run" default="false" />
+
+  <arg name="model_type_is_sparse_resnet" value="$(eval arg('model_type') == 'sparse_resnet')" />
+  <arg name="model_type_is_resnet" value="$(eval arg('model_type') == 'resnet')" />
+  <arg name="model_type_is_sparse_enc_dec" value="$(eval arg('model_type') == 'sparse_enc_dec')" />
+  <arg name="model_type_is_enc_dec" value="$(eval arg('model_type') == 'enc_dec')" />
+  <arg name="model_type_is_sparse" value="$(eval arg('model_type') == 'sparse_resnet' or arg('model_type') == 'sparse_enc_dec')" />
+
+  <node name="nbv_3d_cnn_octree_sparse_memtest" type="octree_sparse_pytorch_memtest.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="max_memory_mb" type="double" value="2048" />
+    <param name="min_memory_mb" type="double" value="400" />
+
+    <!--
+    <param name="max_memory_mb" type="double" value="400" />
+    <param name="min_memory_mb" type="double" value="200" />
+    -->
+    <!--
+    <param name="max_memory_mb" type="double" value="200" />
+    <param name="min_memory_mb" type="double" value="50" />
+    -->
+
+    <param name="memory_precision_mb" type="double" value="2" />
+
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/inria_environments/$(arg model_type)_st_loss_$(arg engine)/chkpt_$(arg model_type)_final_model.pt"
+      if="$(eval arg('model_type_is_sparse') and not arg('unified_loss') and not arg('is_3d'))" />
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/inria_environments/$(arg model_type)_leak05_a09_$(arg engine)/chkpt_$(arg model_type)_final_model.pt" 
+      if="$(eval arg('model_type_is_sparse') and arg('unified_loss') and not arg('is_3d'))" />
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/inria_environments/$(arg model_type)/chkpt_$(arg model_type)_final_model.pt" if="$(eval not arg('model_type_is_sparse') and not arg('is_3d'))" />
+
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg model_type)_st_loss_$(arg engine)/chkpt_$(arg model_type)_final_model.pt"
+      if="$(eval arg('model_type_is_sparse') and not arg('unified_loss') and arg('is_3d'))" />
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg model_type)_leak05_a09_$(arg engine)/chkpt_$(arg model_type)_60_model.pt" 
+      if="$(eval arg('model_type_is_sparse') and arg('unified_loss') and arg('is_3d') and arg('engine') == 'pytorch')" />
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg model_type)_leak05_a09_$(arg engine)/chkpt_$(arg model_type)_final_model.pt" 
+      if="$(eval arg('model_type_is_sparse') and arg('unified_loss') and arg('is_3d') and arg('engine') == 'minkowski')" />
+    <param name="load_checkpoint_file" type="string" 
+      value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg model_type)/chkpt_$(arg model_type)_final_model.pt" if="$(eval not arg('model_type_is_sparse') and arg('is_3d'))" />
+
+    <param name="input_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" unless="$(arg is_3d)"   />
+    <param name="input_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/" if="$(arg is_3d)" />
+
+    <param name="crop_image" type="string" value="128 128 96" if="$(arg is_3d)"     />
+    <param name="crop_image" type="string" value="1250 1250"  unless="$(arg is_3d)" />
+
+    <param name="max_channels" type="int" value="16" if="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />
+    <param name="max_channels" type="int" value="32" unless="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />
+
+    <param name="dry_run" type="bool" value="$(arg dry_run)" />
+
+    <param name="resblock_num" type="int" value="3" />
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="base_channels" type="int" value="4" unless="$(arg is_3d)" />
+    <param name="base_channels" type="int" value="2" if="$(arg is_3d)" />
+ 
+    <param name="model_type" type="string" value="$(arg model_type)" />
+    <param name="engine" type="string" value="$(arg engine)" />
+
+    <param name="max_levels" type="int" value="6" />
+
+    <param name="is_3d" type="bool" value="$(arg is_3d)" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+
+</launch>

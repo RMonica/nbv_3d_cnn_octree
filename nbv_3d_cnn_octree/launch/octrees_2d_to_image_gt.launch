@@ -1,0 +1,31 @@
+<launch>
+
+  <node name="octree_to_image_gt" type="octree_to_image" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="source_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+    <param name="source_suffix" type="string" value="_gt_octree" />
+
+    <param name="dest_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+    <param name="dest_suffix" type="string" value="_gt_reconst" />
+
+    <param name="first_counter" type="int" value="0" />
+
+    <param name="crop_x" type="int" value="250" />
+    <param name="crop_y" type="int" value="250" />
+  </node>
+
+  <node name="octree_to_image_input" type="octree_to_image" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="source_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+    <param name="source_suffix" type="string" value="_input_octree" />
+
+    <param name="dest_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/inria_environments/" />
+    <param name="dest_suffix" type="string" value="_input_reconst" />
+
+    <param name="first_counter" type="int" value="0" />
+
+    <param name="crop_x" type="int" value="250" />
+    <param name="crop_y" type="int" value="250" />
+  </node>
+
+</launch>

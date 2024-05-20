@@ -1,0 +1,115 @@
+<launch>
+
+  <!--<arg name="id" default="179" />-->
+  <arg name="id" default="166" />
+  <arg name="count" default="4" />
+  <arg name="dir" default="179_nl" />
+
+  <node name="octree_to_visualization_msgs" type="octree_to_visualization_msgs" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="color_palette" type="string" value="rainbow" />
+
+    <!--<param name="color_mode" type="string" value="voxel_size" />-->
+    <!--<param name="color_mode" type="string" value="intensity" />-->
+    <!--<param name="color_mode" type="string" value="fixed" />-->
+    <!--<param name="color_mode" type="string" value="voxel_size_intensity" />-->
+    <!--<param name="color_mode" type="string" value="intensity_ch2_to_red" />-->
+
+    <!--
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg id)_input_octree.octree" />
+    <param name="color_mode" type="string" value="intensity_ch2_to_red" />
+    <param name="color1" type="string" value="0 0 0" />
+    <param name="color2" type="string" value="1 0 0" />
+    <param name="voxel_removal_threshold" type="double" value="0.1" />
+    <param name="negative" type="bool" value="true" />
+    <param name="with_size_border_color" type="bool" value="true" />
+    -->
+
+    <!-- empty
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/179_input_octree.octree" />
+    <param name="color_mode" type="string" value="fixed" />
+    <param name="color1" type="string" value="1 1 1" />
+    <param name="color2" type="string" value="1 0 0" />
+    <param name="voxel_removal_threshold" type="double" value="0.1" />
+    <param name="negative" type="bool" value="false" />
+    <param name="with_size_border_color" type="bool" value="true" />
+    -->
+
+    <!--
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg id)_gt_octree.octree" />
+    <param name="color_mode" type="string" value="fixed" />
+    <param name="color1" type="string" value="1 0.3 0.2" />
+    <param name="color2" type="string" value="1 0.3 0.2" />
+    <param name="voxel_removal_threshold" type="double" value="0.1" />
+    <param name="negative" type="bool" value="false" />
+    <param name="with_size_border_color" type="bool" value="false" />
+    -->
+    
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/sparse_enc_dec_leak05_a09_pytorch/sparse_enc_dec_60_$(arg id)_output_merged.octree" />-->
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/sparse_enc_dec_st_loss_pytorch/sparse_enc_dec_final_$(arg id)_output_merged.octree" />-->
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/test2/sparse_enc_dec_final_$(arg id)_output_merged.octree" />-->
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle_3d_realistic/$(arg dir)/$(arg count)_octree.octree" />
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/test/sparse_enc_dec_180_$(arg id)_output_merged.octree" />-->
+    <param name="color_mode" type="string" value="intensity" />
+    <param name="color1" type="string" value="0 0 1" />
+    <param name="color2" type="string" value="0 0 0" />
+    <param name="voxel_removal_threshold_max" type="double" value="1.05" />
+    <param name="voxel_removal_threshold" type="double" value="-0.1" />
+    <param name="with_size_border_color" type="bool" value="true" />
+    
+
+    <param name="channel" type="int" value="0" />
+
+    <param name="image_crop_2d" type="string" value="1250 1250" />
+    <param name="image_crop_3d" type="string" value="128 128 92" />
+
+    <param name="dest_topic" type="string" value="/octree_visualization" />
+
+    <!--<param name="negative" type="bool" value="false" />-->
+
+    <!--<param name="intensity_range" type="double" value="0.7" />-->
+  </node>
+
+  <node name="octree_to_visualization_msgs3" type="octree_to_visualization_msgs" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+
+    <param name="color_palette" type="string" value="reverse_rainbow" />
+
+    <!--
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/$(arg id)_occupied_octree.octree" />
+    <param name="voxel_removal_threshold_max" type="double" value="1.05" />
+    <param name="voxel_removal_threshold" type="double" value="0.95" />
+    -->
+
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/sparse_enc_dec_leak05_a09_pytorch/sparse_enc_dec_60_$(arg id)_output_merged.octree" />-->
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/sparse_enc_dec_st_loss_pytorch/sparse_enc_dec_final_$(arg id)_output_merged.octree" />-->
+    <!--<param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic/test2/sparse_enc_dec_final_$(arg id)_output_merged.octree" />-->
+    <param name="source_filename" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle_3d_realistic/$(arg dir)/$(arg count)_octree.octree" />
+    <param name="voxel_removal_threshold_max" type="double" value="1.15" />
+    <param name="voxel_removal_threshold" type="double" value="1.05" />
+
+
+    <param name="color_mode" type="string" value="fixed" />
+    <!--<param name="color1" type="string" value="1 0 0" />-->
+    <param name="color1" type="string" value="1 0.3 0.2" />
+ 
+    <param name="channel" type="int" value="0" />
+ 
+    <!--
+    <param name="voxel_removal_threshold_max" type="double" value="-0.5" />
+    <param name="voxel_removal_threshold" type="double" value="-1.5" />
+    <param name="channel" type="int" value="1" />
+    -->
+
+    <param name="image_crop_2d" type="string" value="1250 1250" />
+    <param name="image_crop_3d" type="string" value="128 128 92" />
+
+    <param name="dest_topic" type="string" value="/octree_visualization3" />
+
+    <param name="negative" type="bool" value="false" />
+
+    <!--<param name="intensity_range" type="double" value="0.7" />-->
+
+    <param name="with_size_border_color" type="bool" value="false" />
+  </node>
+
+</launch>

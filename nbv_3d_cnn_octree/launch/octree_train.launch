@@ -1,0 +1,21 @@
+<launch>
+
+  <node name="nbv_3d_cnn_octree_train" type="octree_train.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+    <param name="max_memory_mb" type="int" value="3072" />
+    
+    <param name="checkpoint_file" type="string" value="" />
+
+    <param name="tensorboard_dir" type="string" value="$(find nbv_3d_cnn_octree)/data/tensorboard" />
+
+    <param name="config" type="string" value="$(find nbv_3d_cnn_octree)/scripts/o-cnn/tensorflow/script/configs/completion_train.yaml" />
+
+    <param name="ocnn_dataset_root" type="string" value="/home/rimlab/Desktop/installati/O-CNN/tensorflow/script/" />
+
+    <param name="log_file_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/logs/train_" />
+
+    <param name="checkpoint_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/models/chkpt_" />
+
+    <param name="checkpoint_every_iter" type="int" value="2000" />
+  </node>
+
+</launch>

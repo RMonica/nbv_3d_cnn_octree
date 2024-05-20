@@ -1,0 +1,7 @@
+std_msgs/Float32MultiArray empty
+std_msgs/Float32MultiArray frontier
+---
+std_msgs/Float32MultiArray scores
+
+nbv_3d_cnn_msgs/DebugInfo[] debug_info
+---

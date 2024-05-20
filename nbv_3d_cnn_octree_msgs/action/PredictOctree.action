@@ -1,0 +1,9 @@
+nbv_3d_cnn_octree_msgs/Octree empty_and_frontier  # a 2-channel octree
+nbv_3d_cnn_octree_msgs/Octree uninteresting_octree
+---
+nbv_3d_cnn_octree_msgs/Octree octree_scores
+
+float32 prediction_time
+uint64 total_output_values
+float32 memory_allocated
+---

@@ -1,0 +1,139 @@
+<launch>
+
+  <!-- enc_dec sparse_enc_dec_st_loss sparse_enc_dec_leak05_a09_pytorch resnet -->
+  <arg name="method" default="sparse_enc_dec_leak05_a09_pytorch" />
+  <arg name="outdir" default="test" />
+  <arg name="use_octree_for_nbv" default="true" />
+
+  <arg name="image_index" default="179" />
+  <!--<arg name="image_file_name" default="$(find nbv_3d_cnn)/data/inria_environments/$(arg image_index)_environment.png" />-->
+  <arg name="image_file_name" default="$(find nbv_3d_cnn_octree)/data/inria_environments_400/$(arg image_index)_environment.png" />
+  <arg name="save_images" default="true" />
+  <arg name="output_prefix" default="" />
+
+  <arg name="use_octree_for_prediction" value="$(eval not (arg('method') in ['enc_dec', 'resnet']))" />
+
+  <node name="simulate_nbv_cycle" type="simulate_nbv_cycle" pkg="nbv_3d_cnn" output="screen" clear_params="true" required="true" >
+    <param name="image_file_name" type="string" value="$(arg image_file_name)" />
+    <param name="debug_output_folder" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle/$(arg outdir)/$(arg output_prefix)" />
+
+    <param name="random_seed" type="int" value="11" />
+
+    <param name="max_iterations" type="int" value="100" />
+
+    <param name="sample_fixed_number_of_views" type="int" value="100000" />
+
+    <param name="predict_octree_action_name" type="string" value="/nbv_3d_cnn_$(arg method)/predict" if="$(arg use_octree_for_prediction)" />
+    <param name="predict_image_action_name" type="string" value="/nbv_3d_cnn_$(arg method)/predict" unless="$(arg use_octree_for_prediction)" />
+
+    <param name="use_octree_for_nbv" type="bool" value="$(arg use_octree_for_nbv)" />
+
+    <param name="save_images" type="bool" value="$(arg save_images)" />
+
+    <!--
+    <param name="nbv_algorithm" type="string" value="Random" />
+    <param name="log_file" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle/$(arg outdir)/$(arg output_prefix)random_nbv_log.csv" />
+    -->
+    
+    <param name="nbv_algorithm" type="string" value="AutocompleteOctreeIGain" if="$(arg use_octree_for_prediction)" />
+    <param name="nbv_algorithm" type="string" value="AutocompleteVoxelgridIGain" unless="$(arg use_octree_for_prediction)" />
+    <param name="log_file" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle/$(arg outdir)/$(arg output_prefix)ig_nbv_log_autocomplete.csv" />
+    
+
+    <!--
+    <param name="nbv_algorithm" type="string" value="OmniscientGain" />
+    <param name="log_file" type="string" value="$(find nbv_3d_cnn_octree)/data/simulate_nbv_cycle/$(arg outdir)/$(arg output_prefix)omni_nbv_log.csv" />
+     -->
+
+    <param name="igain_min_range" type="double" value="15.0" />
+
+    <param name="sensor_resolution_y" type="int" value="1" />
+    <param name="sensor_resolution_x" type="int" value="512" />
+    <param name="sensor_focal_length" type="double" value="450" />
+    <param name="sensor_resolution_downsample" type="int" value="4" />
+
+    <param name="sensor_range_voxels" type="double" value="128" />
+
+    <param name="view_cube_resolution" type="int" value="16" />
+
+    <param name="octree_max_layers" type="int" value="6" />
+
+    <param name="a_priori_occupied_prob" type="double" value="0.15" />
+  </node>
+
+  <node name="nbv_3d_cnn_sparse_enc_dec_st_loss" type="octree_predict.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true">
+    <param name="checkpoint_file" type="string" 
+           value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_st_loss_pytorch/chkpt_sparse_enc_dec_final_model.pt" />
+    <param name="action_name" type="string" value="~predict" />
+    <param name="model_type" type="string" value="sparse_enc_dec" />
+    <param name="base_channels" type="int" value="4" />
+    <param name="max_levels" type="int" value="6" />
+    <param name="engine" type="string" value="pytorch" />
+
+    <param name="max_memory_mb" type="int" value="3000" />
+
+    <param name="is_3d" type="bool" value="false" />
+    <param name="resblock_num" type="int" value="3" />
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="max_channels" type="int" value="32" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+
+  <node name="nbv_3d_cnn_sparse_enc_dec_leak05_a09_pytorch" type="octree_predict.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true">
+    <param name="checkpoint_file" type="string" 
+           value="$(find nbv_3d_cnn_octree)/data/inria_environments/sparse_enc_dec_leak05_a09_pytorch/chkpt_sparse_enc_dec_final_model.pt" />
+    <param name="action_name" type="string" value="~predict" />
+    <param name="model_type" type="string" value="sparse_enc_dec" />
+    <param name="base_channels" type="int" value="4" />
+    <param name="max_levels" type="int" value="6" />
+    <param name="engine" type="string" value="pytorch" />
+
+    <param name="max_memory_mb" type="int" value="3000" />
+
+    <param name="is_3d" type="bool" value="false" />
+    <param name="resblock_num" type="int" value="3" />
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="max_channels" type="int" value="32" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+
+  <node name="nbv_3d_cnn_enc_dec" type="octree_predict.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true">
+    <param name="checkpoint_file" type="string" 
+           value="$(find nbv_3d_cnn_octree)/data/inria_environments/enc_dec/chkpt_enc_dec_final_model.pt" />
+    <param name="action_name" type="string" value="~predict" />
+    <param name="model_type" type="string" value="enc_dec" />
+    <param name="base_channels" type="int" value="4" />
+    <param name="max_levels" type="int" value="6" />
+    <param name="engine" type="string" value="pytorch" />
+
+    <param name="max_memory_mb" type="int" value="3000" />
+
+    <param name="is_3d" type="bool" value="false" />
+    <param name="resblock_num" type="int" value="3" />
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="max_channels" type="int" value="32" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+
+  <node name="nbv_3d_cnn_resnet" type="octree_predict.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true">
+    <param name="checkpoint_file" type="string" 
+           value="$(find nbv_3d_cnn_octree)/data/inria_environments/resnet/chkpt_resnet_final_model.pt" />
+    <param name="action_name" type="string" value="~predict" />
+    <param name="model_type" type="string" value="resnet" />
+    <param name="base_channels" type="int" value="4" />
+    <param name="max_levels" type="int" value="6" />
+    <param name="engine" type="string" value="pytorch" />
+
+    <param name="max_memory_mb" type="int" value="3000" />
+
+    <param name="is_3d" type="bool" value="false" />
+    <param name="resblock_num" type="int" value="3" />
+    <param name="label_hidden_channels" type="int" value="16" />
+    <param name="max_channels" type="int" value="16" />
+
+    <env name="PYTHONPATH" value="$(env PYTHONPATH):$(find nbv_3d_cnn_octree)/deps/MinkowskiEngine_install/lib/python3.8/site-packages/MinkowskiEngine-0.5.4-py3.8-linux-x86_64.egg/" />
+  </node>
+</launch>

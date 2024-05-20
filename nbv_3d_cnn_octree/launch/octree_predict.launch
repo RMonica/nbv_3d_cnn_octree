@@ -1,0 +1,17 @@
+<launch>
+
+  <node name="nbv_3d_cnn_octree_predict" type="octree_predict.py" pkg="nbv_3d_cnn_octree" output="screen" clear_params="true" >
+    <param name="max_memory_mb" type="int" value="3072" />
+    
+    <param name="checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/models_ok/chkpt_320001" />
+    <!--<param name="checkpoint_file" type="string" value="$(find nbv_3d_cnn_octree)/data/model/iter_320000.ckpt.index" />-->
+
+    <param name="config" type="string" value="$(find nbv_3d_cnn_octree)/scripts/o-cnn/tensorflow/script/configs/completion_test.yaml" />
+
+    <param name="ocnn_dataset_root" type="string" value="/home/rimlab/Desktop/installati/O-CNN/tensorflow/script/" />
+
+    <param name="test_output_file" type="string" value="$(find nbv_3d_cnn_octree)/data/test/test.octree" />
+    <param name="test_input_file" type="string" value="$(find nbv_3d_cnn_octree)/data/test/test_input.octree" />
+  </node>
+
+</launch>
