@@ -23,6 +23,9 @@ class InformationGainOctreeNBV;
 class OctreeRaycastOpenCL;
 class OctreePredict;
 
+template <int DIMS>
+class IOctreePrediction;
+
 class AutocompleteOctreeIGainNBVAdapter: public INBVAdapter
 {
   public:
@@ -57,19 +60,8 @@ class AutocompleteOctreeIGainNBVAdapter: public INBVAdapter
                        Eigen::Quaternionf & orientation,
                        ViewWithScoreVector * const all_views_with_scores = NULL) override;
 
-  bool GetNextBestViewFromList(const Voxelgrid & environment,
-                               const Voxelgrid & empty,
-                               const Voxelgrid & occupied,
-                               const Voxelgrid & frontier,
-                               const Vector3fVector & origins,
-                               const QuaternionfVector & orientations,
-                               const bool combine_origins_orientations,
-                               Eigen::Vector3f & origin,
-                               Eigen::Quaternionf & orientation,
-                               ViewWithScoreVector * const all_views_with_scores = NULL);
-
-  bool Predict3d(const Voxelgrid &empty, const Voxelgrid &occupied, Voxelgrid &autocompleted);
-  bool Predict(const Voxelgrid &empty, const Voxelgrid &occupied, Voxelgrid &autocompleted);
+  std::shared_ptr<IOctreePrediction<3> > Predict3d(const Voxelgrid &empty, const Voxelgrid &occupied);
+  std::shared_ptr<IOctreePrediction<2> > Predict(const Voxelgrid &empty, const Voxelgrid &occupied);
 
   virtual bool IsRandom() const override {return m_sample_fixed_number_of_views; }
 
@@ -90,6 +82,10 @@ class AutocompleteOctreeIGainNBVAdapter: public INBVAdapter
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
   private:
+  float GetRMSE(const Voxelgrid & environment, const Voxelgrid & autocompleted,
+                const Voxelgrid & empty, const Voxelgrid & occupied,
+                const bool unknown_only);
+
   ros::NodeHandle & m_nh;
 
   bool m_is_3d;
@@ -97,6 +93,8 @@ class AutocompleteOctreeIGainNBVAdapter: public INBVAdapter
   std::shared_ptr<OctreePredict> m_octree_predict;
 
   Voxelgrid m_last_autocompleted_image;
+  float m_last_autocompleted_rmse = std::numeric_limits<float>::quiet_NaN();
+  float m_last_autocompleted_unknown_only_rmse = std::numeric_limits<float>::quiet_NaN();
 
   bool m_use_octree_for_prediction;
   bool m_use_octree_for_nbv;

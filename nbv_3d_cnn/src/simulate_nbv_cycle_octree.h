@@ -6,6 +6,7 @@
 #include <sstream>
 #include <map>
 #include <unordered_map>
+#include <functional>
 
 #include <ros/ros.h>
 
@@ -22,6 +23,8 @@ typedef int64_t int64;
 
 typedef std::vector<uint32> Uint32Vector;
 
+using OctreeLevels = image_to_octree::OctreeLevels;
+
 template <int DIMS>
 using IntArray = image_to_octree::IntArray<DIMS>;
 
@@ -30,6 +33,7 @@ using image_to_octree::ArrToIntArray;
 using image_to_octree::DivIntArray;
 using image_to_octree::MulIntArray;
 using image_to_octree::UpsampleImage;
+using image_to_octree::IntArrayFilledWith;
 
 template <typename Scalar, int DIMS>
 struct OctreeCell
@@ -52,7 +56,7 @@ struct Octree
 {
   const uint32 num_levels;
   const uint32 num_children = (1 << DIMS);
-  IntArray<DIMS> dense_size;
+  const IntArray<DIMS> dense_size;
   typedef OctreeCell<Scalar, DIMS> Cell;
 
   typedef std::vector<Scalar> ScalarVector;
@@ -76,7 +80,27 @@ struct Octree
     top_level_image.resize(base_prod, uint32(-1));
   }
 
-  uint64 TopLevelImageIndex(const IntArray<DIMS> & idx)
+  Octree & operator=(const Octree & other)
+  {
+    if (num_levels != other.num_levels)
+    {
+      ROS_FATAL("Octree: operator=: mismatched num levels: %d and %d", int(num_levels), int(other.num_levels));
+      std::exit(1);
+    }
+    if (dense_size != other.dense_size)
+    {
+      ROS_FATAL("Octree: operator=: mismatched dense_size.");
+      std::exit(1);
+    }
+
+    level_children = other.level_children;
+    level_scalars = other.level_scalars;
+    top_level_image = other.top_level_image;
+
+    return *this;
+  }
+
+  uint64 TopLevelImageIndex(const IntArray<DIMS> & idx) const
   {
     const IntArray<DIMS> base_sizes = DivIntArray<DIMS>(dense_size, (1 << (num_levels - 1)));
 
@@ -246,6 +270,103 @@ Octree<Scalar, DIMS> OctreeLevelsToOctree(const OctreeLoadSave::OctreeLevels & o
   return result;
 }
 
+template <typename Scalar, int DIMS>
+void OctreeToOctreeLevelsKernel(const Octree<Scalar, DIMS> & octree,
+                                const IntArray<DIMS> & coords,
+                                const uint32 c_i,
+                                const uint32 l,
+                                OctreeLevels & octree_levels)
+{
+  typedef Octree<Scalar, DIMS> MyOctree;
+  typedef typename MyOctree::Cell Cell;
+
+  const uint32 num_levels = octree.num_levels;
+
+  if (l >= num_levels)
+  {
+    ROS_ERROR("OctreeToOctreeLevelsKernel: malformed octree: reached level %d, but there are only %d levels.",
+              int(l), int(num_levels));
+    return;
+  }
+
+  const Cell c = octree.LLGetCell(l, c_i);
+
+  bool leaf = true;
+  for (uint64 i = 0; i < octree.num_children; i++)
+  {
+    if (c.children[i] != uint32(-1))
+    {
+      // recursive call
+      const uint32 c_c_i = c.children[i];
+      IntArray<DIMS> child_coords = MulIntArray<DIMS>(coords, 2);
+      for (uint64 d = 0; d < DIMS; d++)
+        child_coords[d] += !!(i & (1 << (DIMS - d - 1)));
+      OctreeToOctreeLevelsKernel<Scalar, DIMS>(octree, child_coords, c_c_i, l + 1, octree_levels);
+
+      leaf = false;
+    }
+  }
+
+  if (leaf)
+  {
+    // if leaf, store value
+    At<Scalar, DIMS>(octree_levels.imgs[l], coords.data()) = c.value;
+    At<uint8, DIMS>(octree_levels.img_masks[l], coords.data()) = uint8(true);
+  }
+}
+
+template <typename Scalar, int DIMS>
+OctreeLevels OctreeToOctreeLevels(const Octree<Scalar, DIMS> & octree)
+{
+  OctreeLevels octree_levels;
+  const uint32 num_levels = octree.num_levels;
+
+  octree_levels.imgs.resize(num_levels);
+  octree_levels.img_masks.resize(num_levels);
+
+  int type;
+  switch (sizeof(Scalar) / sizeof(float))
+  {
+    case 1: type = CV_32FC1; break;
+    case 2: type = CV_32FC2; break;
+    case 3: type = CV_32FC3; break;
+    case 4: type = CV_32FC4; break;
+    default:
+      ROS_FATAL("OctreeToOctreeLevels: unsupported type with %d floats, max 4 floats.", int(sizeof(Scalar) / sizeof(float)));
+      std::exit(1);
+  }
+
+  const IntArray<DIMS> dense_size = octree.dense_size;
+  IntArray<DIMS> curr_size = dense_size;
+  for (uint32 l = 0; l < num_levels; l++)
+  {
+    octree_levels.imgs[num_levels - l - 1] = cv::Mat(DIMS, curr_size.data(), type, Scalar() * 0.0f);
+    octree_levels.img_masks[num_levels - l - 1] = cv::Mat(DIMS, curr_size.data(), type, uint8(0));
+
+    curr_size = DivIntArray<DIMS>(curr_size, 2);
+  }
+
+  const IntArray<DIMS> base_sizes = DivIntArray<DIMS>(dense_size, (1 << (num_levels - 1)));
+  const int width = base_sizes[DIMS - 1];
+  const int height = base_sizes[DIMS - 2];
+  const int depth = DIMS >= 3 ? base_sizes[DIMS - 3] : 1;
+  for (int z = 0; z < depth; z++)
+    for (int y = 0; y < height; y++)
+      for (int x = 0; x < width; x++)
+      {
+        int xyz[3] = {x, y, z};
+        IntArray<DIMS> coords;
+        for (uint64 i = 0; i < DIMS; i++)
+          coords[DIMS - i - 1] = xyz[i];
+
+        uint32 c_i = octree.TopLevelImageAt(coords);
+        if (c_i != uint32(-1))
+          OctreeToOctreeLevelsKernel<Scalar, DIMS>(octree, coords, c_i, 0, octree_levels);
+      }
+
+  return octree_levels;
+}
+
 template <typename Scalar, int DIMS, typename SparseImageType >
 Octree<Scalar, DIMS> SparseOctreeLevelsToOctree(const std::vector<SparseImageType> & sparse_images)
 {
@@ -317,6 +438,469 @@ Octree<Scalar, DIMS> SparseOctreeLevelsToOctree(const std::vector<SparseImageTyp
   }
 
   return result;
+}
+
+template <typename ScalarIn, typename ScalarOut, int DIMS>
+// true: outputs value, false: outputs index, if false index may be -1 if pruned branch
+bool OctreeUnaryOpKernel(const Octree<ScalarIn, DIMS> & octree, const std::function<ScalarOut(ScalarIn)> & op,
+                         const uint32 l, const uint32 c_i, Octree<ScalarOut, DIMS> & octree_out,
+                         ScalarOut & value_out, uint32 & index_out)
+{
+  typedef Octree<ScalarIn, DIMS> MyOctreeIn;
+  typedef typename MyOctreeIn::Cell CellIn;
+
+  typedef Octree<ScalarOut, DIMS> MyOctreeOut;
+  typedef typename MyOctreeOut::Cell CellOut;
+
+  const uint32 num_levels = octree.num_levels;
+  const uint32 num_children = octree.num_children;
+
+  if (l >= num_levels)
+  {
+    ROS_ERROR("OctreeUnaryOpKernel: malformed octree: reached level %d, but there are only %d levels.",
+              int(l), int(num_levels));
+    value_out = ScalarOut() * 0.0f;
+    return true;
+  }
+
+  const CellIn cell = octree.LLGetCell(l, c_i);
+  CellOut cell_out;
+  bool any_children = false;
+  ScalarOut child_values[num_children];
+  uint32 child_indices[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    child_indices[i] = uint32(-1);
+  bool has_value[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    has_value[i] = false;
+
+  for (uint32 i = 0; i < num_children; i++)
+  {
+    const uint32 c_c_i = cell.children[i];
+    if (c_c_i == uint32(-1))
+    {
+      has_value[i] = false;
+      child_indices[i] = uint32(-1);
+      continue; // not set -> not set
+    }
+
+    any_children = true;
+
+    ScalarOut child_value;
+    uint32 child_index;
+    const bool value_or_not_index = OctreeUnaryOpKernel(octree, op, l + 1, c_c_i, octree_out, child_value, child_index);
+    has_value[i] = value_or_not_index;
+    if (value_or_not_index)
+      child_values[i] = child_value;
+    else
+      child_indices[i] = child_index;
+  }
+
+  if (!any_children)
+  {
+    value_out = op(cell.value);
+    return true;
+  }
+  else //if (any_children)
+  {
+    bool all_values_equal = true;
+    for (uint32 i = 0; i < num_children && all_values_equal; i++)
+      if (!has_value[i] || child_values[i] != child_values[0])
+        all_values_equal = false;
+
+    if (all_values_equal)
+    {
+      value_out = child_values[0];
+      return true;
+    }
+    else //if (!all_values_equal)
+    {
+      for (uint32 i = 0; i < num_children; i++)
+      {
+        if (!has_value[i])
+          cell_out.children[i] = child_indices[i];
+        else
+        {
+          CellOut child_cell;
+          child_cell.value = child_values[i];
+          cell_out.children[i] = octree_out.LLAddCell(l + 1, child_cell);
+        }
+      }
+
+      index_out = octree_out.LLAddCell(l, cell_out);
+      return false;
+    }
+  }
+}
+
+template <typename ScalarIn, typename ScalarOut, int DIMS>
+Octree<ScalarOut, DIMS> OctreeUnaryOp(const Octree<ScalarIn, DIMS> & octree, const std::function<ScalarOut(ScalarIn)> & op)
+{
+  typedef Octree<ScalarIn, DIMS> MyOctreeIn;
+  typedef typename MyOctreeIn::Cell CellIn;
+
+  typedef Octree<ScalarOut, DIMS> MyOctreeOut;
+  typedef typename MyOctreeOut::Cell CellOut;
+
+  const uint64 num_levels = octree.num_levels;
+  const IntArray<DIMS> dense_size = octree.dense_size;
+  const IntArray<DIMS> base_size = DivIntArray<DIMS>(dense_size, (1 << (num_levels - 1)));
+
+  MyOctreeOut octree_out(num_levels, dense_size);
+
+  for (uint64 l = 0; l < num_levels; l++)
+  {
+    octree_out.level_children[l].reserve(octree.level_children[l].size());
+    octree_out.level_scalars[l].reserve(octree.level_scalars[l].size());
+  }
+
+  ForeachSize<DIMS>(base_size, 1, [&](const IntArray<DIMS> & coords) -> bool {
+
+    const uint32 c_i = octree.TopLevelImageAt(coords);
+    if (c_i == uint32(-1))
+    {
+      octree_out.TopLevelImageAt(coords) = uint32(-1);
+      return true; // not set -> not set
+    }
+
+    ScalarOut child_value;
+    uint32 child_index;
+    const bool value_or_not_index = OctreeUnaryOpKernel(octree, op, 0, c_i, octree_out, child_value, child_index);
+
+    if (value_or_not_index)
+    {
+      CellOut cell_out;
+      cell_out.value = child_value;
+      octree_out.TopLevelImageAt(coords) = octree_out.LLAddCell(0, cell_out);
+    }
+    else
+    {
+      octree_out.TopLevelImageAt(coords) = child_index;
+    }
+
+    return true;
+  });
+
+  return octree_out;
+}
+
+template <typename Scalar, int DIMS>
+// true: outputs value, false: outputs index, if false index may be -1 if pruned branch
+bool ImageToOctreeKernel(const cv::Mat & image, const uint64 num_levels, const IntArray<DIMS> & image_size,
+                         const uint32 l, const IntArray<DIMS> & coords, Octree<Scalar, DIMS> & octree_out,
+                         Scalar & value_out, uint32 & index_out)
+{
+  typedef Octree<Scalar, DIMS> MyOctree;
+  typedef typename MyOctree::Cell Cell;
+
+  const uint32 num_children = octree_out.num_children;
+
+  // check if out of base image
+  for (uint64 i = 0; i < DIMS; i++)
+    if (coords[i] * (1 << (num_levels - 1 - l)) >= image_size[i])
+    {
+      index_out = -1;
+      return false; // out of image, set to not set
+    }
+
+  if (l + 1 == num_levels) // reached max resolution
+  {
+    value_out = At<Scalar, DIMS>(image, coords.data()); // just return image value
+    return true;
+  }
+
+  Cell cell_out;
+  Scalar child_values[num_children];
+  uint32 child_indices[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    child_indices[i] = uint32(-1);
+  bool has_value[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    has_value[i] = false;
+
+  for (uint32 i = 0; i < num_children; i++)
+  {
+    IntArray<DIMS> child_coords = MulIntArray<DIMS>(coords, 2);
+    for (uint64 d = 0; d < DIMS; d++)
+      child_coords[d] += !!(i & (1 << (DIMS - d - 1)));
+
+    Scalar child_value;
+    uint32 child_index;
+    const bool value_or_not_index = ImageToOctreeKernel<Scalar, DIMS>
+        (image, num_levels, image_size, l + 1, child_coords, octree_out, child_value, child_index);
+    has_value[i] = value_or_not_index;
+    if (value_or_not_index)
+      child_values[i] = child_value;
+    else
+      child_indices[i] = child_index;
+  }
+
+  bool all_values_equal = true;
+  for (uint32 i = 0; i < num_children && all_values_equal; i++)
+    if (!has_value[i] || child_values[i] != child_values[0])
+      all_values_equal = false;
+
+  if (all_values_equal)
+  {
+    value_out = child_values[0];
+    return true;
+  }
+  else //if (!all_values_equal)
+  {
+    for (uint32 i = 0; i < num_children; i++)
+    {
+      if (!has_value[i])
+        cell_out.children[i] = child_indices[i];
+      else
+      {
+        Cell child_cell;
+        child_cell.value = child_values[i];
+        cell_out.children[i] = octree_out.LLAddCell(l + 1, child_cell);
+      }
+    }
+
+    index_out = octree_out.LLAddCell(l, cell_out);
+    return false;
+  }
+}
+
+template <typename Scalar, int DIMS>
+Octree<Scalar, DIMS> ImageToOctree(const cv::Mat & image, const uint64 num_levels)
+{
+  typedef Octree<Scalar, DIMS> MyOctree;
+  typedef typename MyOctree::Cell Cell;
+
+  uint64 greater_power2 = 1;
+  while ([greater_power2, image]() -> bool {
+           for (int i = 0; i < DIMS; i++)
+             if (image.size[i] > greater_power2)
+               return true;
+           return false;
+         }())
+    greater_power2 *= 2;
+
+  IntArray<DIMS> image_size;
+  for (uint64 i = 0; i < DIMS; i++)
+    image_size[i] = image.size[i];
+  const IntArray<DIMS> dense_size = IntArrayFilledWith<DIMS>(greater_power2);
+  const IntArray<DIMS> base_size = DivIntArray<DIMS>(dense_size, (1 << (num_levels - 1)));
+
+  MyOctree octree_out(num_levels, dense_size);
+
+  ForeachSize<DIMS>(base_size, 1, [&](const IntArray<DIMS> & coords) -> bool {
+    // check if out of base image
+    for (uint64 i = 0; i < DIMS; i++)
+      if ((coords[i] * (1 << (num_levels - 1))) >= image_size[i])
+      {
+        octree_out.TopLevelImageAt(coords) = uint32(-1);
+        return true; // out of image, set to not set
+      }
+
+    Scalar child_value;
+    uint32 child_index;
+    const bool value_or_not_index = ImageToOctreeKernel<Scalar, DIMS>
+        (image, num_levels, image_size, 0, coords, octree_out, child_value, child_index);
+
+    if (value_or_not_index)
+    {
+      Cell cell_out;
+      cell_out.value = child_value;
+      octree_out.TopLevelImageAt(coords) = octree_out.LLAddCell(0, cell_out);
+    }
+    else
+    {
+      octree_out.TopLevelImageAt(coords) = child_index;
+    }
+
+    return true;
+  });
+
+  return octree_out;
+}
+
+template <typename Scalar1In, typename Scalar2In, typename ScalarOut, int DIMS>
+// true: outputs value, false: outputs index, if false index may be -1 if pruned branch
+bool OctreeBinaryOpKernel(const Octree<Scalar1In, DIMS> & octree1, const Octree<Scalar1In, DIMS> & octree2,
+                          const std::function<ScalarOut(Scalar1In, Scalar2In)> & op,
+                          const uint32 l1, const uint32 c_i1, const bool is_frozen_1,
+                          const uint32 l2, const uint32 c_i2, const bool is_frozen_2,
+                          Octree<ScalarOut, DIMS> & octree_out,
+                          ScalarOut & value_out, uint32 & index_out)
+{
+  typedef Octree<Scalar1In, DIMS> MyOctree1In;
+  typedef typename MyOctree1In::Cell Cell1In;
+
+  typedef Octree<Scalar2In, DIMS> MyOctree2In;
+  typedef typename MyOctree2In::Cell Cell2In;
+
+  typedef Octree<ScalarOut, DIMS> MyOctreeOut;
+  typedef typename MyOctreeOut::Cell CellOut;
+
+  const uint32 num_levels = octree1.num_levels;
+  const uint32 num_children = octree1.num_children;
+
+  if (l1 >= num_levels || l2 >= num_levels)
+  {
+    ROS_ERROR("OctreeBinaryOpKernel: malformed octree: reached levels (%d, %d), but there are only %d levels.",
+              int(l1), int(l2), int(num_levels));
+    value_out = ScalarOut() * 0.0f;
+    return true;
+  }
+
+  const uint32 l = std::max<uint32>(l1, l2);
+
+  const bool valid_cell1 = (c_i1 != uint32(-1));
+  const bool valid_cell2 = (c_i2 != uint32(-1));
+
+  Cell1In cell1, cell2;
+  if (valid_cell1)
+    cell1 = octree1.LLGetCell(l1, c_i1);
+  if (valid_cell2)
+    cell2 = octree2.LLGetCell(l2, c_i2);
+
+  CellOut cell_out;
+  bool any_children = false;
+  ScalarOut child_values[num_children];
+  uint32 child_indices[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    child_indices[i] = uint32(-1);
+  bool child_has_value[num_children];
+  for (uint32 i = 0; i < num_children; i++)
+    child_has_value[i] = false;
+
+  for (uint32 i = 0; i < num_children; i++)
+  {
+    const uint32 c_c_i1 = (valid_cell1 && !is_frozen_1) ? cell1.children[i] : uint32(-1);
+    const uint32 c_c_i2 = (valid_cell2 && !is_frozen_2) ? cell2.children[i] : uint32(-1);
+
+    if (c_c_i1 == uint32(-1) && c_c_i2 == uint32(-1))
+    {
+      child_has_value[i] = false;
+      child_indices[i] = uint32(-1);
+      continue; // both not set -> not set
+    }
+
+    any_children = true;
+
+    const bool is_frozen_child1 = is_frozen_1 || (c_c_i1 == uint32(-1));
+    const bool is_frozen_child2 = is_frozen_2 || (c_c_i2 == uint32(-1));
+
+    const uint32 child_l1 = !is_frozen_child1 ? l1 + 1 : l1;
+    const uint32 child_l2 = !is_frozen_child2 ? l2 + 1 : l2;
+
+    const uint32 child_c_i1 = !is_frozen_child1 ? c_c_i1 : c_i1;
+    const uint32 child_c_i2 = !is_frozen_child2 ? c_c_i2 : c_i2;
+
+
+    ScalarOut child_value;
+    uint32 child_index;
+    const bool value_or_not_index = OctreeBinaryOpKernel(octree1, octree2, op,
+                                                         child_l1, child_c_i1, is_frozen_child1,
+                                                         child_l2, child_c_i2, is_frozen_child2,
+                                                         octree_out, child_value, child_index);
+    child_has_value[i] = value_or_not_index;
+    if (value_or_not_index)
+      child_values[i] = child_value;
+    else
+      child_indices[i] = child_index;
+  }
+
+  if (!any_children)
+  {
+    const Scalar1In nan1 = Scalar1In() * std::numeric_limits<float>::quiet_NaN();
+    const Scalar2In nan2 = Scalar2In() * std::numeric_limits<float>::quiet_NaN();
+    value_out = op(valid_cell1 ? cell1.value : nan1, valid_cell2 ? cell2.value : nan2);
+    return true;
+  }
+  else //if (any_children)
+  {
+    bool all_values_equal = true;
+    for (uint32 i = 0; i < num_children && all_values_equal; i++)
+      if (!child_has_value[i] || child_values[i] != child_values[0])
+        all_values_equal = false;
+
+    if (all_values_equal)
+    {
+      value_out = child_values[0];
+      return true;
+    }
+    else //if (!all_values_equal)
+    {
+      for (uint32 i = 0; i < num_children; i++)
+      {
+        if (!child_has_value[i])
+          cell_out.children[i] = child_indices[i];
+        else
+        {
+          CellOut child_cell;
+          child_cell.value = child_values[i];
+          cell_out.children[i] = octree_out.LLAddCell(l + 1, child_cell);
+        }
+      }
+
+      index_out = octree_out.LLAddCell(l, cell_out);
+      return false;
+    }
+  }
+}
+
+template <typename Scalar1In, typename Scalar2In, typename ScalarOut, int DIMS>
+Octree<ScalarOut, DIMS> OctreeBinaryOp(const Octree<Scalar1In, DIMS> & octree1, const Octree<Scalar2In, DIMS> & octree2,
+                                       const std::function<ScalarOut(Scalar1In, Scalar2In)> & op)
+{
+  typedef Octree<ScalarOut, DIMS> MyOctreeOut;
+  typedef typename MyOctreeOut::Cell CellOut;
+
+  const uint64 num_levels = octree1.num_levels;
+  const IntArray<DIMS> dense_size = octree1.dense_size;
+  const IntArray<DIMS> base_size = DivIntArray<DIMS>(dense_size, (1 << (num_levels - 1)));
+
+  MyOctreeOut octree_out(num_levels, dense_size);
+
+  for (uint64 l = 0; l < num_levels; l++)
+  {
+    octree_out.level_children[l].reserve(std::max(octree1.level_children[l].size(), octree2.level_children[l].size()));
+    octree_out.level_scalars[l].reserve(std::max(octree1.level_scalars[l].size(), octree2.level_scalars[l].size()));
+  }
+
+  ForeachSize<DIMS>(base_size, 1, [&](const IntArray<DIMS> & coords) -> bool {
+
+    const uint32 c_i1 = octree1.TopLevelImageAt(coords);
+    const uint32 c_i2 = octree2.TopLevelImageAt(coords);
+    if (c_i1 == uint32(-1) && c_i2 == uint32(-1))
+    {
+      octree_out.TopLevelImageAt(coords) = uint32(-1);
+      return true; // both not set -> not set
+    }
+
+    ScalarOut child_value;
+    uint32 child_index;
+    const bool value_or_not_index = OctreeBinaryOpKernel(octree1, octree2, op,
+                                                         0, c_i1, false,
+                                                         0, c_i2, false,
+                                                         octree_out, child_value, child_index);
+
+    if (value_or_not_index)
+    {
+      CellOut cell_out;
+      cell_out.value = child_value;
+      octree_out.TopLevelImageAt(coords) = octree_out.LLAddCell(0, cell_out);
+    }
+    else
+    {
+      octree_out.TopLevelImageAt(coords) = child_index;
+    }
+
+    return true;
+  });
+
+  return octree_out;
+}
+
+template <typename Scalar, int DIMS>
+Octree<Scalar, DIMS> OctreePrune(const Octree<Scalar, DIMS> & oct)
+{
+  return OctreeUnaryOp<Scalar, Scalar, DIMS>(oct, [](float a) -> float {return a; });
 }
 
 template <typename Scalar, int DIMS>

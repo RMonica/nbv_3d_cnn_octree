@@ -40,6 +40,14 @@ public:
   typedef std::vector<Eigen::Matrix3f, Eigen::aligned_allocator<Eigen::Matrix3f> > Matrix3fVector;
   typedef std::vector<Eigen::Quaternionf, Eigen::aligned_allocator<Eigen::Quaternionf> > QuaternionfVector;
 
+  enum class SaveFileFormat
+  {
+    ALL,
+    IMAGE,
+    VOXELGRID,
+    OCTOMAP
+  };
+
   GenerateTestDataset(ros::NodeHandle & nh): m_nh(nh), m_opencl(m_nh)
   {
     std::string param_string;
@@ -102,6 +110,22 @@ public:
     m_nh.param<std::string>(PARAM_NAME_SOURCE_IMAGES_SUFFIX, m_source_images_suffix,
                             PARAM_DEFAULT_SOURCE_IMAGES_SUFFIX);
     m_nh.param<std::string>(PARAM_NAME_DEST_IMAGES_PREFIX, m_dest_images_prefix, PARAM_DEFAULT_DEST_IMAGES_PREFIX);
+
+    m_nh.param<std::string>("save_file_format", param_string, "all");
+    if (param_string == "all")
+      m_save_file_format = SaveFileFormat::ALL;
+    else if (param_string == "image")
+      m_save_file_format = SaveFileFormat::IMAGE;
+    else if (param_string == "voxelgrid")
+      m_save_file_format = SaveFileFormat::VOXELGRID;
+    else if (param_string == "octomap")
+      m_save_file_format = SaveFileFormat::OCTOMAP;
+    else
+    {
+      ROS_FATAL("generate_test_dataset: unknown save file format: %s", param_string.c_str());
+      std::exit(1);
+    }
+
 
     m_nh.param<int>(PARAM_NAME_NUM_VIEW_POSES_MAX, param_int, PARAM_DEFAULT_NUM_VIEW_POSES_MAX);
     m_num_view_poses_max = param_int;
@@ -269,6 +293,40 @@ public:
     return environment;
   }
 
+  void SaveVoxelgrid(const Voxelgrid & voxelgrid, const std::string & filename_prefix)
+  {
+    switch (m_save_file_format)
+    {
+      case SaveFileFormat::ALL:
+      case SaveFileFormat::IMAGE:
+        voxelgrid.Save2D3D(filename_prefix, m_is_3d);
+        break;
+      case SaveFileFormat::VOXELGRID:
+        voxelgrid.ToFileBinary(filename_prefix + ".binvoxelgrid");
+        break;
+      case SaveFileFormat::OCTOMAP:
+        voxelgrid.SaveOctomapOctree(filename_prefix + ".bt");
+        break;
+    }
+  }
+
+  void SaveVoxelgridR(const Voxelgrid & voxelgrid, const std::string & filename_prefix, const double resolution)
+  {
+    switch (m_save_file_format)
+    {
+      case SaveFileFormat::ALL:
+      case SaveFileFormat::IMAGE:
+        voxelgrid.Save2D3DR(filename_prefix, m_is_3d, resolution);
+        break;
+      case SaveFileFormat::VOXELGRID:
+        voxelgrid.ToFileBinary(filename_prefix + ".binvoxelgrid");
+        break;
+      case SaveFileFormat::OCTOMAP:
+        voxelgrid.SaveOctomapOctree(filename_prefix + ".bt", resolution);
+        break;
+    }
+  }
+
   void onTimer(const ros::TimerEvent &)
   {
     Voxelgrid::Ptr environment = LoadEnvironment(m_prefix_counter, m_counter);
@@ -397,7 +455,7 @@ public:
 
     std::string environment_filename = m_dest_images_prefix +
         std::to_string(m_image_counter) + "_environment";
-    environment->Save2D3DR(environment_filename, m_is_3d, resolution);
+    SaveVoxelgridR(*environment, environment_filename, resolution);
 
     if (!m_skip_view_evaluation)
     {
@@ -420,15 +478,15 @@ public:
 
     std::string frontier_filename = m_dest_images_prefix +
         std::to_string(m_image_counter) + "_frontier";
-    cumulative_frontier_observation.Save2D3D(frontier_filename, m_is_3d);
+    SaveVoxelgrid(cumulative_frontier_observation, frontier_filename);
 
     std::string empty_filename = m_dest_images_prefix +
         std::to_string(m_image_counter) + "_empty";
-    cumulative_empty_observation.Save2D3D(empty_filename, m_is_3d);
+    SaveVoxelgrid(cumulative_empty_observation, empty_filename);
 
     std::string occupied_filename = m_dest_images_prefix +
         std::to_string(m_image_counter) + "_occupied";
-    cumulative_occupied_observation.Save2D3D(occupied_filename, m_is_3d);
+    SaveVoxelgrid(cumulative_occupied_observation, occupied_filename);
 
     m_image_counter++;
 
@@ -449,6 +507,8 @@ private:
 
   bool m_is_3d;
   bool m_is_3d_realistic;
+
+  SaveFileFormat m_save_file_format;
 
   bool m_skip_view_evaluation;
 

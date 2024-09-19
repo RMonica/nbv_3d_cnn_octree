@@ -46,6 +46,7 @@ class INBVAdapter
   typedef std::vector<float> FloatVector;
 
   typedef std::map<std::string, std::string> StringStringMap;
+  typedef std::pair<std::string, std::string> StringStringPair;
 
   typedef std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> > Vector2fVector;
   typedef std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > Vector3fVector;

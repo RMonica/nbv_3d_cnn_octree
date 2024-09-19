@@ -16,6 +16,10 @@
 
 #include "octree_raycast_opencl.h"
 
+#include "simulate_nbv_cycle_octree_prediction.h"
+
+#define CHECK_SELF_CONSISTENCY false
+
 template <typename T>
 const float & SUBSCRIPT(const T & v, const size_t i) {return v[i]; }
 template <>
@@ -307,9 +311,10 @@ OctreePredict::OctreePredict(ros::NodeHandle & nh, const bool use_octree): m_nh(
 }
 
 template <int DIMS>
-cv::Mat OctreePredict::PredictOctree(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
-                      const cv::Mat & uninteresting_output_mask,
-                      float & prediction_time, uint64 & total_output_values)
+simulate_nbv_cycle_octree::Octree<float, DIMS>
+  OctreePredict::PredictOctree(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
+                               const cv::Mat & uninteresting_output_mask,
+                               float & prediction_time, uint64 & total_output_values)
 {
   ros::Time prepare_time = ros::Time::now();
   const bool is_3d = (DIMS == 3);
@@ -428,51 +433,52 @@ cv::Mat OctreePredict::PredictOctree(const cv::Mat & unpad_empty_img, const cv::
   const nbv_3d_cnn_octree_msgs::Octree & octree_scores_msg = octree_result.octree_scores;
 
   const uint64 num_levels = octree_scores_msg.levels.size();
-  for (uint64 l = 0; l < num_levels; l++)
-  {
-    cv::Mat img, mask;
-    if (!is_3d)
-    {
-      OctreeLoadSave::SparseImage<float> sparse_image = OctreeLevelToSparseImage<float, 1, false>(octree_scores_msg.levels[l]);
-      img = OctreeLoadSave::SparseImageToImage(sparse_image, mask);
-    }
-    else
-    {
-      OctreeLoadSave::SparseImage3D<float> sparse_image = OctreeLevelToSparseImage<float, 1, true>(octree_scores_msg.levels[l]);
-      img = OctreeLoadSave::SparseImageToImage3D(sparse_image, mask);
-    }
-
-    octree_levels_out.imgs.push_back(img);
-    octree_levels_out.img_masks.push_back(mask);
-
-    if (!result_img.data) // first iter
-    {
-      result_img = img;
-      result_mask = mask;
-    }
-    else
-    {
-      result_img = result_img + img;
-      result_mask = result_mask + mask;
-    }
-    if (l + 1 < num_levels)
-    {
-      result_img = image_to_octree::UpsampleImage2D3D<float>(result_img, is_3d);
-      result_mask = image_to_octree::UpsampleImage2D3D<uint8>(result_mask, is_3d);
-    }
-  }
 
   ros::Time octree_recover_time = ros::Time::now();
   auto sparse_octree_levels = OctreeToSparseOctreeLevels<float, 1, DIMS==3>(octree_scores_msg);
-  const simulate_nbv_cycle_octree::Octree<float, DIMS> oct = simulate_nbv_cycle_octree::SparseOctreeLevelsToOctree
-    <float, DIMS>(sparse_octree_levels);
+  simulate_nbv_cycle_octree::Octree<float, DIMS> oct = simulate_nbv_cycle_octree::OctreePrune<float, DIMS>(
+        simulate_nbv_cycle_octree::SparseOctreeLevelsToOctree<float, DIMS>(sparse_octree_levels));
   ros::Duration octree_recover_duration = ros::Time::now() - octree_recover_time;
   m_last_debug_info.insert(StringStringPair("time_predict_octree_recover", std::to_string(octree_recover_duration.toSec())));
   m_last_debug_info.insert(StringStringPair("total_octree_cells", std::to_string(oct.GetTotalCells())));
 
   // check self-consistency
-  if (false)
+  if (CHECK_SELF_CONSISTENCY)
   {
+    for (uint64 l = 0; l < num_levels; l++)
+    {
+      cv::Mat img, mask;
+      if (!is_3d)
+      {
+        OctreeLoadSave::SparseImage<float> sparse_image = OctreeLevelToSparseImage<float, 1, false>(octree_scores_msg.levels[l]);
+        img = OctreeLoadSave::SparseImageToImage(sparse_image, mask);
+      }
+      else
+      {
+        OctreeLoadSave::SparseImage3D<float> sparse_image = OctreeLevelToSparseImage<float, 1, true>(octree_scores_msg.levels[l]);
+        img = OctreeLoadSave::SparseImageToImage3D(sparse_image, mask);
+      }
+
+      octree_levels_out.imgs.push_back(img);
+      octree_levels_out.img_masks.push_back(mask);
+
+      if (!result_img.data) // first iter
+      {
+        result_img = img;
+        result_mask = mask;
+      }
+      else
+      {
+        result_img = result_img + img;
+        result_mask = result_mask + mask;
+      }
+      if (l + 1 < num_levels)
+      {
+        result_img = image_to_octree::UpsampleImage2D3D<float>(result_img, is_3d);
+        result_mask = image_to_octree::UpsampleImage2D3D<uint8>(result_mask, is_3d);
+      }
+    }
+
     uint64 counter = 0;
     image_to_octree::IntArray<DIMS> sizes = oct.dense_size;
     image_to_octree::ForeachSize<DIMS>(sizes, 1, [&](const image_to_octree::IntArray<DIMS> & i) -> bool
@@ -496,12 +502,6 @@ cv::Mat OctreePredict::PredictOctree(const cv::Mat & unpad_empty_img, const cv::
       std::exit(1);
   }
 
-  // remove padding
-  if (!is_3d)
-    result_img = image_to_octree::CropImage<float, 2>(result_img, {0, 0}, {int(unpad_height), int(unpad_width)});
-  else
-    result_img = image_to_octree::CropImage<float, 3>(result_img, {0, 0, 0}, {int(unpad_depth), int(unpad_height), int(unpad_width)});
-
   prediction_time = octree_result.prediction_time;
   total_output_values = octree_result.total_output_values;
 
@@ -510,7 +510,9 @@ cv::Mat OctreePredict::PredictOctree(const cv::Mat & unpad_empty_img, const cv::
 
   m_last_debug_info.insert(StringStringPair("x_memory_allocated", std::to_string(octree_result.memory_allocated)));
 
-  return result_img;
+  ROS_INFO("octree_predict: end.");
+
+  return oct;
 }
 
 cv::Mat OctreePredict::PredictImage(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
@@ -637,50 +639,56 @@ cv::Mat OctreePredict::PredictImage(const cv::Mat & unpad_empty_img, const cv::M
   return result_img;
 }
 
-bool OctreePredict::Predict3d(const Voxelgrid & empty, const Voxelgrid & occupied, Voxelgrid & autocompleted)
+IOctreePrediction<3>::Ptr OctreePredict::Predict3d(const Voxelgrid & empty, const Voxelgrid & occupied)
 {
-  ROS_INFO("voxelgrid_predict: Predict3d start.");
+  ROS_INFO("OctreePredict: Predict3d start.");
 
   m_last_debug_info.clear();
 
   const cv::Mat unpad_empty_img = VoxelGridToMat3D(empty);
   const cv::Mat unpad_occupied_img = VoxelGridToMat3D(occupied);
 
+  std::array<int, 3> unpad_sizes;
+  for (uint64 i = 0; i < 3; i++)
+    unpad_sizes[i] = unpad_empty_img.size[i];
+
   cv::Mat interesting_output_mask = 1.0 - unpad_empty_img - unpad_occupied_img;
   interesting_output_mask = image_to_octree::PadToGreaterPower2<float>(interesting_output_mask);
   cv::Mat uninteresting_output_mask = 1.0 - interesting_output_mask;
 
-  cv::Mat result_img;
+  IOctreePrediction<3>::Ptr prediction;
   float prediction_time;
   uint64 total_output_values;
   try
   {
     if (!m_use_octree)
     {
-      result_img = PredictImage(unpad_empty_img, unpad_occupied_img, uninteresting_output_mask, true,
-                                prediction_time, total_output_values);
+      cv::Mat img = PredictImage(unpad_empty_img, unpad_occupied_img, uninteresting_output_mask, true,
+                                 prediction_time, total_output_values);
+      prediction.reset(new ImagePrediction<3>(img));
     }
     else
     {
-      result_img = PredictOctree<3>(unpad_empty_img, unpad_occupied_img,
-                                    uninteresting_output_mask, prediction_time, total_output_values);
+      simulate_nbv_cycle_octree::Octree<float, 3> oct = PredictOctree<3>(unpad_empty_img, unpad_occupied_img,
+                                                        uninteresting_output_mask, prediction_time, total_output_values);
+      prediction.reset(new OctreePrediction<3>(oct, unpad_sizes));
     }
   }
   catch (const std::string & e)
   {
     ROS_ERROR("OctreePredict: onPredict: %s.", e.c_str());
-    return false;
+    return IOctreePrediction<3>::Ptr();
   }
 
-  autocompleted = Mat3DToVoxelgrid(result_img);
-
-  m_last_debug_info.insert(StringStringPair("prediction_time", std::to_string(prediction_time)));
+  m_last_debug_info.insert(StringStringPair("time_predict_network_time", std::to_string(prediction_time)));
   m_last_debug_info.insert(StringStringPair("total_output_values", std::to_string(total_output_values)));
 
-  return true;
+  ROS_INFO("OctreePredict: Predict3d end.");
+
+  return prediction;
 }
 
-bool OctreePredict::Predict2d(const Voxelgrid & empty, const Voxelgrid & occupied, Voxelgrid & autocompleted)
+IOctreePrediction<2>::Ptr OctreePredict::Predict2d(const Voxelgrid & empty, const Voxelgrid & occupied)
 {
   ROS_INFO("voxelgrid_predict: onPredict2d start.");
 
@@ -689,38 +697,45 @@ bool OctreePredict::Predict2d(const Voxelgrid & empty, const Voxelgrid & occupie
   cv::Mat unpad_empty_img = VoxelGridToMat2D(empty);
   cv::Mat unpad_occupied_img = VoxelGridToMat2D(occupied);
 
+  std::array<int, 2> unpad_sizes;
+  for (uint64 i = 0; i < 2; i++)
+    unpad_sizes[i] = unpad_empty_img.size[i];
+
   cv::Mat interesting_output_mask = 1.0f - unpad_empty_img - unpad_occupied_img;
   interesting_output_mask = image_to_octree::PadToGreaterPower2<float>(interesting_output_mask);
   cv::Mat uninteresting_output_mask = 1.0f - interesting_output_mask;
 
-  cv::Mat result_img;
+  IOctreePrediction<2>::Ptr prediction;
   float prediction_time;
   uint64 total_output_values;
   try
   {
     if (!m_use_octree)
     {
-      result_img = PredictImage(unpad_empty_img, unpad_occupied_img, uninteresting_output_mask, false,
-                                prediction_time, total_output_values);
+      cv::Mat img = PredictImage(unpad_empty_img, unpad_occupied_img, uninteresting_output_mask, false,
+                                 prediction_time, total_output_values);
+
+      prediction.reset(new ImagePrediction<2>(img));
     }
     else
     {
-      result_img = PredictOctree<2>(unpad_empty_img, unpad_occupied_img,
-                                    uninteresting_output_mask, prediction_time, total_output_values);
+      simulate_nbv_cycle_octree::Octree<float, 2> oct = PredictOctree<2>(unpad_empty_img, unpad_occupied_img,
+                                                     uninteresting_output_mask, prediction_time, total_output_values);
+      prediction.reset(new OctreePrediction<2>(oct, unpad_sizes));
     }
   }
   catch (const std::string & e)
   {
     ROS_ERROR("OctreePredict: onPredict: %s.", e.c_str());
-    return false;
+    return IOctreePrediction<2>::Ptr();
   }
 
-  autocompleted = Mat2DToVoxelgrid(result_img);
-
-  m_last_debug_info.insert(StringStringPair("prediction_time", std::to_string(prediction_time)));
+  m_last_debug_info.insert(StringStringPair("time_predict_network_time", std::to_string(prediction_time)));
   m_last_debug_info.insert(StringStringPair("total_output_values", std::to_string(total_output_values)));
 
-  return true;
+  ROS_INFO("voxelgrid_predict: onPredict2d end.");
+
+  return prediction;
 }
 
 // -----------------------------------------
@@ -782,78 +797,151 @@ void InformationGainOctreeNBV::ForEachEmpty(const Voxelgrid & empty, const uint6
 }
 
 template <int DIMS>
+simulate_nbv_cycle_octree::Octree<float, DIMS> VoxelgridToOctree(const Voxelgrid & voxelgrid, const uint64 max_layers)
+{
+  const uint64 width = voxelgrid.GetWidth();
+  const uint64 height = voxelgrid.GetHeight();
+  const uint64 depth = voxelgrid.GetDepth();
+  std::array<int, DIMS> env_size;
+  for (int i = 0; i < DIMS; i++)
+  {
+    if (i == DIMS - 3) env_size[i] = depth;
+    if (i == DIMS - 2) env_size[i] = height;
+    if (i == DIMS - 1) env_size[i] = width;
+  }
+
+  cv::Mat image;
+  image = cv::Mat(DIMS, env_size.data(), CV_32FC1);
+  for (uint64 z = 0; z < depth; z++)
+    for (uint64 y = 0; y < height; y++)
+      for (uint64 x = 0; x < width; x++)
+      {
+        if (DIMS == 3)
+          image.at<float>(z, y, x) = voxelgrid.at(x, y, z);
+        else
+          image.at<float>(y, x) = voxelgrid.at(x, y, z);
+      }
+
+  const simulate_nbv_cycle_octree::Octree<float, DIMS> oct =
+    simulate_nbv_cycle_octree::ImageToOctree<float, DIMS>(image, max_layers);
+  return oct;
+}
+
+template <int DIMS>
 InformationGainOctreeNBV::Uint32Vector InformationGainOctreeNBV::VoxelgridToSerializedOctree(const Voxelgrid & empty,
                                                                                              const Voxelgrid & occupied,
+                                                                                             const typename IOctreePrediction<DIMS>::Ptr
+                                                                                             prediction,
                                                                                              const uint64 max_layers)
 {
   const uint64 width = empty.GetWidth();
   const uint64 height = empty.GetHeight();
   const uint64 depth = empty.GetDepth();
-  int sizes[3] = {int(depth), int(height), int(width)};
-  cv::Mat image;
-  if (DIMS == 2)
+
+  ros::Time conv_start_time = ros::Time::now();
+  simulate_nbv_cycle_octree::Octree<float, DIMS> empty_octree =  VoxelgridToOctree<DIMS>(empty, max_layers);
+  simulate_nbv_cycle_octree::Octree<float, DIMS> occupied_octree =  VoxelgridToOctree<DIMS>(occupied, max_layers);
+  ros::Duration conv_end_time = ros::Time::now() - conv_start_time;
+  m_last_debug_info.insert(StringStringPair("time_conversion_vx_to_octree", std::to_string(conv_end_time.toSec())));
+  ROS_INFO("nbv_3d_cnn: VoxelgridToSerializedOctree: time_conversion_vx_to_octree %f s", float(conv_end_time.toSec()));
+
+  simulate_nbv_cycle_octree::Octree<float, DIMS> autocompleted_octree = prediction->GetOctree(max_layers);
+
+  ROS_INFO("nbv_3d_cnn: VoxelgridToSerializedOctree: computing empty_and_not_occupied_octree");
+  const simulate_nbv_cycle_octree::Octree<float, DIMS> empty_and_not_occupied_octree =
+    simulate_nbv_cycle_octree::OctreeBinaryOp<float, float, float, DIMS>(empty_octree,
+                                                                         occupied_octree,
+                                                                         [](float a, float b) -> float {
+      return a + (b * -1.0f);
+    });
+
+  ROS_INFO("nbv_3d_cnn: VoxelgridToSerializedOctree: merging and serializing octrees");
+  const simulate_nbv_cycle_octree::Octree<cv::Vec2f, DIMS> oct =
+    simulate_nbv_cycle_octree::OctreeBinaryOp<float, float, cv::Vec2f, DIMS>(autocompleted_octree,
+                                                                             empty_and_not_occupied_octree,
+                                                                             [](float a, float b) -> cv::Vec2f {
+      if (std::isnan(b))
+        return cv::Vec2f(a, 0.0f);
+      if (b > 0.0f) // forced empty
+        return cv::Vec2f(0.0f, b);
+      if (b < 0.0f) // forced occupied
+        return cv::Vec2f(1.0f, b);
+      return cv::Vec2f(a, 0.0f); // not forced: return a
+    });
+
+  m_last_debug_info.insert(StringStringPair("nbv_octree_total_cells", std::to_string(oct.GetTotalCells())));
+  const Uint32Vector serialized_oct = simulate_nbv_cycle_octree::SerializeOctreeToUint32(oct);
+
+  ROS_INFO("nbv_3d_cnn: VoxelgridToSerializedOctree: done.");
+
+  // for debug purposes only
+  ros::Time debug_start_time = ros::Time::now();
   {
-    image = cv::Mat(height, width, CV_32FC2);
-    for (uint64 y = 0; y < height; y++)
-      for (uint64 x = 0; x < width; x++)
-      {
-        image.at<cv::Vec2f>(y, x)[0] = occupied.at(x, y, 0);
-        image.at<cv::Vec2f>(y, x)[1] = empty.at(x, y, 0);
-      }
+    const simulate_nbv_cycle_octree::OctreeLevels octree_levels = simulate_nbv_cycle_octree::OctreeToOctreeLevels(oct);
+
+    std::array<int, DIMS> env_size;
+    for (int i = 0; i < DIMS; i++)
+    {
+      if (i == DIMS - 3) env_size[i] = depth;
+      if (i == DIMS - 2) env_size[i] = height;
+      if (i == DIMS - 1) env_size[i] = width;
+    }
+
+    cv::Mat initial_mask;
+    initial_mask = cv::Mat(DIMS, env_size.data(), CV_8UC1);
+    initial_mask = 1;
+    initial_mask = image_to_octree::PadToGreaterPower2<uint8>(initial_mask);
+
+    cv::Mat img = octree_levels.imgs[0].clone();
+    for (int i = 1; i < octree_levels.imgs.size(); i++)
+    {
+      img = image_to_octree::UpsampleImage<cv::Vec2f, DIMS>(img);
+      img = img + octree_levels.imgs[i];
+    }
+
+    img = image_to_octree::CropImage<cv::Vec2f, DIMS>(img, image_to_octree::IntArrayFilledWith<DIMS>(0), env_size);
+
+    m_last_predicted_image = img;
+    m_last_initial_mask = initial_mask;
+    m_last_max_layers = max_layers;
   }
-  else
+  ros::Duration debug_end_time = ros::Time::now() - debug_start_time;
+  m_last_debug_info.insert(StringStringPair("time_debug1", std::to_string(debug_end_time.toSec())));
+
+  if (CHECK_SELF_CONSISTENCY)
   {
-    image = cv::Mat(3, sizes, CV_32FC2);
+    ROS_INFO("nbv_3d_cnn: VoxelgridToSerializedOctree self-consistency check");
+    Voxelgrid autocompleted = prediction->GetVoxelgrid();
+    autocompleted = *autocompleted.Or(occupied);
+    autocompleted = *autocompleted.AndNot(empty);
+    uint64 counter = 0;
     for (uint64 z = 0; z < depth; z++)
       for (uint64 y = 0; y < height; y++)
         for (uint64 x = 0; x < width; x++)
         {
-          image.at<cv::Vec2f>(z, y, x)[0] = occupied.at(x, y, z);
-          image.at<cv::Vec2f>(z, y, x)[1] = empty.at(x, y, z);
+          const cv::Vec2f octree_at = simulate_nbv_cycle_octree::SerializedOctreeAt<cv::Vec2f, DIMS>(serialized_oct, z, y, x);
+          const float empty_at = empty.at(x, y, z);
+          const float occupied_at = occupied.at(x, y, z);
+          const float autocompleted_at = autocompleted.at(x, y, z);
+          const float empty_and_not_occupied = empty_at + (occupied_at * -1.0f);
+          if (empty_and_not_occupied != octree_at[1] || autocompleted_at != octree_at[0])
+          {
+            std::cout << "at " << x << " " << y << " " << z << ": ";
+            std::cout << "empty_and_not_occupied " << empty_and_not_occupied << " autocompleted_at " <<
+                         autocompleted_at << " octree_at " << octree_at << std::endl;
+            counter++;
+          }
         }
+    std::cout << "total errors: " << counter << std::endl;
   }
-  image = image_to_octree::PadToGreaterPower2<cv::Vec2f>(image, cv::Vec2f(0.0f, 1.0f));
-
-  cv::Mat initial_mask;
-  if (DIMS == 2)
-    initial_mask = cv::Mat(height, width, CV_8UC1);
-  else
-    initial_mask = cv::Mat(3, sizes, CV_8UC1);
-  initial_mask = 1;
-  initial_mask = image_to_octree::PadToGreaterPower2<uint8>(initial_mask);
-
-  const OctreeLoadSave::OctreeLevels octree_levels = image_to_octree::ImageToOctreeLevelsD<cv::Vec2f, DIMS>(image, initial_mask,
-                                                                                                            max_layers, false);
-  m_last_predicted_image = image;
-  m_last_initial_mask = initial_mask;
-  m_last_max_layers = max_layers;
-  const simulate_nbv_cycle_octree::Octree<cv::Vec2f, DIMS> oct =
-    simulate_nbv_cycle_octree::OctreeLevelsToOctree<cv::Vec2f, DIMS>(octree_levels);
-
-  const Uint32Vector serialized_oct = simulate_nbv_cycle_octree::SerializeOctreeToUint32(oct);
-
-  uint64 counter = 0;
-  for (uint64 z = 0; z < depth; z++)
-    for (uint64 y = 0; y < height; y++)
-      for (uint64 x = 0; x < width; x++)
-      {
-        const cv::Vec2f octree_at = simulate_nbv_cycle_octree::SerializedOctreeAt<cv::Vec2f, DIMS>(serialized_oct, z, y, x);
-        const float empty_at = empty.at(x, y, z);
-        const float occupied_at = occupied.at(x, y, z);
-        if (empty_at != octree_at[1] || occupied_at != octree_at[0])
-        {
-          std::cout << "at " << x << " " << y << " " << z << ": ";
-          std::cout << "empty_at " << empty_at << " occupied_at " << occupied_at << " octree_at " << octree_at << std::endl;
-        }
-        counter++;
-      }
 
   return serialized_oct;
 }
 
+template <int DIMS>
 bool InformationGainOctreeNBV::GetNextBestView(const Voxelgrid & environment,
                                                const Voxelgrid & empty,
-                                               const Voxelgrid & autocompleted,
+                                               const typename IOctreePrediction<DIMS>::Ptr prediction,
                                                const Voxelgrid & occupied,
                                                const uint64 max_layers,
                                                const Vector3fVector & skip_origins,
@@ -863,6 +951,8 @@ bool InformationGainOctreeNBV::GetNextBestView(const Voxelgrid & environment,
                                                ViewWithScoreVector * const all_views_with_score)
 {
   m_last_debug_info.clear();
+
+  ros::Time time_get_next_best_view_start = ros::Time::now();
 
   Vector3fVector sample_origins;
   ROS_INFO("nbv_3d_cnn: InformationGainNBVAdapter: computing origins");
@@ -932,14 +1022,20 @@ bool InformationGainOctreeNBV::GetNextBestView(const Voxelgrid & environment,
   const QuaternionfVector & orientations = m_sample_fixed_number_of_views ? sampled_fixed_orientations : sample_orientations;
   const bool combine_origins_orientations = !m_sample_fixed_number_of_views;
 
-  return GetNextBestViewFromList(environment, empty, autocompleted, occupied, max_layers,
-                                 origins, orientations, combine_origins_orientations,
-                                 origin, orientation, all_views_with_score);
+  const bool r =  GetNextBestViewFromList<DIMS>(environment, empty, prediction, occupied, max_layers,
+                                                origins, orientations, combine_origins_orientations,
+                                                origin, orientation, all_views_with_score);
+  ros::Duration time_get_next_best_view = ros::Time::now() - time_get_next_best_view_start;
+
+  m_last_debug_info.insert(StringStringPair("time_nbv_total", std::to_string(time_get_next_best_view.toSec())));
+
+  return r;
 }
 
+template <int DIMS>
 bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environment,
                                                        const Voxelgrid & empty,
-                                                       const Voxelgrid & autocompleted,
+                                                       const typename IOctreePrediction<DIMS>::Ptr prediction,
                                                        const Voxelgrid & occupied,
                                                        const uint64 max_layers,
                                                        const Vector3fVector & origins,
@@ -972,16 +1068,14 @@ bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environ
 
   ROS_INFO("nbv_3d_cnn: InformationGainOctreeNBVAdapter: octree conversion");
 
-  const Voxelgrid empty_or_not_occupied = *empty.AddedTo(*occupied.MultipliedBy(-1.0f));
+  ros::Time octree_conversion_time = ros::Time::now();
 
   OctreeRaycastOpenCL::EnvDataPtr environment_data;
   Uint32Vector serialized_octree;
+  Voxelgrid empty_or_not_occupied;
   if (m_use_octree)
   {
-    if (m_is_3d)
-      serialized_octree = VoxelgridToSerializedOctree<3>(empty_or_not_occupied, autocompleted, max_layers);
-    else
-      serialized_octree = VoxelgridToSerializedOctree<2>(empty_or_not_occupied, autocompleted, max_layers);
+    serialized_octree = VoxelgridToSerializedOctree<DIMS>(empty, occupied, prediction, max_layers);
     ROS_INFO("nbv_3d_cnn: InformationGainOctreeNBVAdapter: serialized octree size: %d", int(serialized_octree.size()));
     m_last_debug_info.insert(StringStringPair("serialized_octree_size", std::to_string(serialized_octree.size())));
 
@@ -989,8 +1083,13 @@ bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environ
   }
   else
   {
-    environment_data.reset(new OctreeRaycastOpenCL::VoxelgridEnvData(autocompleted, empty_or_not_occupied));
+    empty_or_not_occupied = *empty.AddedTo(*occupied.MultipliedBy(-1.0f));
+
+    environment_data.reset(new OctreeRaycastOpenCL::VoxelgridEnvData(prediction->GetVoxelgrid(), empty_or_not_occupied));
   }
+
+  ros::Duration octree_conversion_duration = ros::Time::now() - octree_conversion_time;
+  m_last_debug_info.insert(StringStringPair("time_nbv_octree_conversion", std::to_string(octree_conversion_duration.toSec())));
 
   ROS_INFO("nbv_3d_cnn: InformationGainOctreeNBVAdapter: evaluatemultiview");
 
@@ -1009,20 +1108,13 @@ bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environ
                                                        sensor_focal_length_for_raycast,
                                                        m_max_range, m_min_range, m_a_priori_occupied_prob, ovv);
   ros::Duration dur1 = ros::Time::now() - time1;
-  m_last_debug_info.insert(StringStringPair("opencl_raycast_num_views", std::to_string(num_views)));
-  m_last_debug_info.insert(StringStringPair("opencl_raycast_time", std::to_string(dur1.toSec())));
-  m_last_debug_info.insert(StringStringPair("opencl_raycast_time_per_view_mus", std::to_string(dur1.toSec() * 1000000.0f / num_views)));
-  m_last_debug_info.insert(StringStringPair("opencl_upload_time", std::to_string(m_octree_opencl.GetLastUploadTime())));
-  m_last_debug_info.insert(StringStringPair("opencl_simulation_time", std::to_string(m_octree_opencl.GetLastSimulationTime())));
+  m_last_debug_info.insert(StringStringPair("nbv_num_views", std::to_string(num_views)));
+  m_last_debug_info.insert(StringStringPair("time_nbv_opencl_raycast", std::to_string(dur1.toSec())));
+  m_last_debug_info.insert(StringStringPair("time_nbv_raycast_time_per_view_mus", std::to_string(dur1.toSec() * 1000000.0f / num_views)));
+  //m_last_debug_info.insert(StringStringPair("opencl_upload_time", std::to_string(m_octree_opencl.GetLastUploadTime())));
+  //m_last_debug_info.insert(StringStringPair("opencl_simulation_time", std::to_string(m_octree_opencl.GetLastSimulationTime())));
 
   FloatVector & scores = ovv;
-
-//  FloatVector scores(num_views, 0.0f);
-//  for (uint64 i = 0; i < num_views; i++)
-//  {
-//    for (uint64 h = 0; h < local_directions.size(); h++)
-//      scores[i] += ovv[h + i * local_directions.size()];
-//  }
 
   ROS_INFO("nbv_3d_cnn: InformationGainOctreeNBVAdapter: computing scores and visibility matrix");
 
@@ -1044,6 +1136,8 @@ bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environ
   }
 
   ROS_INFO("nbv_3d_cnn: Generating debug image");
+
+  ros::Time debug_start_time = ros::Time::now();
 
   origin = max_origin;
   orientation = max_orientation;
@@ -1093,6 +1187,9 @@ bool InformationGainOctreeNBV::GetNextBestViewFromList(const Voxelgrid & environ
       all_views_with_score->push_back(vws);
     }
   }
+
+  ros::Duration debug_end_time = ros::Time::now() - debug_start_time;
+  m_last_debug_info.insert(StringStringPair("time_debug2", std::to_string(debug_end_time.toSec())));
 
   return max_score > 0.0f;
 }
@@ -1184,29 +1281,46 @@ AutocompleteOctreeIGainNBVAdapter::AutocompleteOctreeIGainNBVAdapter(ros::NodeHa
                                                                ));
 }
 
-bool AutocompleteOctreeIGainNBVAdapter::Predict3d(const Voxelgrid &empty, const Voxelgrid &occupied, Voxelgrid &autocompleted)
+IOctreePrediction<3>::Ptr AutocompleteOctreeIGainNBVAdapter::Predict3d(const Voxelgrid &empty, const Voxelgrid &occupied)
 {
-  const bool success = m_octree_predict->Predict3d(empty, occupied, autocompleted);
-
-  if (!success)
-  {
-    ROS_ERROR("AutocompleteOctreeIGainNBVAdapter: Predict3d: failed.");
-    return false;
-  }
-  return true;
+  return m_octree_predict->Predict3d(empty, occupied);
 }
 
-bool AutocompleteOctreeIGainNBVAdapter::Predict(const Voxelgrid & empty, const Voxelgrid & occupied, Voxelgrid & autocompleted)
+IOctreePrediction<2>::Ptr AutocompleteOctreeIGainNBVAdapter::Predict(const Voxelgrid & empty, const Voxelgrid & occupied)
 {
-  const bool success = m_octree_predict->Predict2d(empty, occupied, autocompleted);
+  return m_octree_predict->Predict2d(empty, occupied);
+}
 
-  if (!success)
-  {
-    ROS_ERROR("AutocompleteOctreeIGainNBVAdapter: Predict: failed.");
-    return false;
-  }
+float AutocompleteOctreeIGainNBVAdapter::GetRMSE(const Voxelgrid & environment, const Voxelgrid & autocompleted,
+                                                 const Voxelgrid & empty, const Voxelgrid & occupied,
+                                                 const bool unknown_only)
+{
+  const uint64 width = environment.GetWidth();
+  const uint64 height = environment.GetHeight();
+  const uint64 depth = environment.GetDepth();
 
-  return true;
+  uint64 counter = 0;
+  double avg = 0.0;
+  for (uint64 z = 0; z < depth; z++)
+    for (uint64 y = 0; y < height; y++)
+      for (uint64 x = 0; x < width; x++)
+      {
+        if (unknown_only)
+        {
+          const bool is_occupied = occupied.at(x, y, z) > 0.5f;
+          const bool is_empty = empty.at(x, y, z) > 0.5f;
+          if (is_occupied || is_empty)
+            continue;
+        }
+
+        const float diff = environment.at(x, y, z) - autocompleted.at(x, y, z);
+        avg += diff * diff;
+
+        counter++;
+      }
+  avg /= double(counter);
+
+  return float(std::sqrt(avg));
 }
 
 bool AutocompleteOctreeIGainNBVAdapter::GetNextBestView(const Voxelgrid & environment,
@@ -1223,80 +1337,53 @@ bool AutocompleteOctreeIGainNBVAdapter::GetNextBestView(const Voxelgrid & enviro
 
   ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: GetNextBestView start.");
 
-  Voxelgrid autocompleted;
-  if (m_is_3d)
-  {
-    if (!Predict3d(empty, occupied, autocompleted))
-      return false;
-  }
-  else
-  {
-    if (!Predict(empty, occupied, autocompleted))
-      return false;
-  }
-  autocompleted.Clamp(0.0f, 1.0f); // clamp [0,1]
-  //m_last_autocompleted_image = autocompleted;
-
-//  autocompleted.Multiply(1.0f - m_probability_cnn_prediction_wrong);
-//  autocompleted.Add(m_probability_cnn_prediction_wrong * m_a_priori_occupied_prob);
-  autocompleted = *autocompleted.Or(occupied);
-  autocompleted = *autocompleted.AndNot(empty);
-  m_last_autocompleted_image = autocompleted;
-
-  ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: computing information gain.");
-
   const uint64 max_layers = m_octree_predict->GetMaxLayers();
 
-  bool r = m_information_gain_octree->GetNextBestView(environment, empty, autocompleted, occupied,
+  Voxelgrid autocompleted;
+  bool r;
+  if (m_is_3d)
+  {
+    IOctreePrediction<3>::Ptr prediction;
+    prediction = Predict3d(empty, occupied);
+    if (!prediction)
+      return false;
+
+    ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: computing information gain.");
+
+    r = m_information_gain_octree->GetNextBestView<3>(environment, empty, prediction, occupied,
                                                       max_layers,
                                                       skip_origins, skip_orientations, origin, orientation,
                                                       all_views_with_scores);
 
-  ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: GetNextBestView end.");
-  return r;
-}
-
-bool AutocompleteOctreeIGainNBVAdapter::GetNextBestViewFromList(const Voxelgrid & environment,
-                                                                const Voxelgrid & empty,
-                                                                const Voxelgrid & occupied,
-                                                                const Voxelgrid & frontier,
-                                                                const Vector3fVector & origins,
-                                                                const QuaternionfVector & orientations,
-                                                                const bool combine_origins_orientations,
-                                                                Eigen::Vector3f & origin,
-                                                                Eigen::Quaternionf & orientation,
-                                                                ViewWithScoreVector * const all_views_with_score)
-{
-  ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: GetNextBestView start.");
-
-  Voxelgrid autocompleted;
-  if (m_is_3d)
-  {
-    if (!Predict3d(empty, occupied, autocompleted))
-      return false;
+    ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: done.");
+    autocompleted = prediction->GetVoxelgrid();
   }
   else
   {
-    if (!Predict(empty, occupied, autocompleted))
+    IOctreePrediction<2>::Ptr prediction;
+    prediction = Predict(empty, occupied);
+    if (!prediction)
       return false;
-  }
-  autocompleted.Clamp(0.0f, 1.0f); // clamp [0,1]
-  //m_last_autocompleted_image = autocompleted;
 
-//  autocompleted.Multiply(1.0f - m_probability_cnn_prediction_wrong);
-//  autocompleted.Add(m_probability_cnn_prediction_wrong * m_a_priori_occupied_prob);
+    ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: computing information gain.");
+
+    r = m_information_gain_octree->GetNextBestView<2>(environment, empty, prediction, occupied,
+                                                      max_layers,
+                                                      skip_origins, skip_orientations, origin, orientation,
+                                                      all_views_with_scores);
+
+    ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: done.");
+    autocompleted = prediction->GetVoxelgrid();
+  }
+
+  autocompleted.Clamp(0.0f, 1.0f); // clamp [0,1]
+
   autocompleted = *autocompleted.Or(occupied);
   autocompleted = *autocompleted.AndNot(empty);
   m_last_autocompleted_image = autocompleted;
 
-  ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: computing information gain.");
-
-  const uint64 max_layers = m_octree_predict->GetMaxLayers();
-
-  bool r = m_information_gain_octree->GetNextBestViewFromList(environment, empty, autocompleted, occupied,
-                                                              max_layers,
-                                                              origins, orientations, combine_origins_orientations,
-                                                              origin, orientation, all_views_with_score);
+  m_last_autocompleted_rmse = GetRMSE(environment, autocompleted, empty, occupied, false);
+  m_last_autocompleted_unknown_only_rmse = GetRMSE(environment, autocompleted, empty, occupied, true);
 
   ROS_INFO("simulate_nbv_cycle: AutocompleteOctreeIGainNBVAdapter: GetNextBestView end.");
   return r;
@@ -1310,6 +1397,10 @@ AutocompleteOctreeIGainNBVAdapter::StringStringMap AutocompleteOctreeIGainNBVAda
   StringStringMap result;
   result.insert(p_debug_info.begin(), p_debug_info.end());
   result.insert(o_debug_info.begin(), o_debug_info.end());
+
+  result.insert(StringStringPair("autocompleted_rmse", std::to_string(m_last_autocompleted_rmse)));
+  result.insert(StringStringPair("autocompleted_unknown_only_rmse", std::to_string(m_last_autocompleted_unknown_only_rmse)));
+
   return result;
 }
 

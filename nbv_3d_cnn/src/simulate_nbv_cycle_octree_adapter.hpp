@@ -32,6 +32,8 @@
 
 #include <nbv_3d_cnn/simulate_nbv_cycle_adapter.h>
 
+#include "simulate_nbv_cycle_octree_prediction.h"
+
 class OctreeRaycastOpenCL;
 
 class OctreePredict
@@ -54,17 +56,17 @@ class OctreePredict
   OctreePredict(ros::NodeHandle & nh, const bool use_octree);
 
   template <int DIMS>
-  cv::Mat PredictOctree(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
-                        const cv::Mat & uninteresting_output_mask,
-                        float & prediction_time, uint64 & total_output_values);
+  simulate_nbv_cycle_octree::Octree<float, DIMS> PredictOctree(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
+                                                               const cv::Mat & uninteresting_output_mask,
+                                                               float & prediction_time, uint64 & total_output_values);
 
   cv::Mat PredictImage(const cv::Mat & unpad_empty_img, const cv::Mat & unpad_occupied_img,
                        const cv::Mat & uninteresting_output_mask, const bool is_3d,
                        float & prediction_time, uint64 & total_output_values);
 
-  bool Predict3d(const Voxelgrid & empty, const Voxelgrid & occupied, Voxelgrid & autocompleted);
+  IOctreePrediction<3>::Ptr Predict3d(const Voxelgrid & empty, const Voxelgrid & occupied);
 
-  bool Predict2d(const Voxelgrid & empty, const Voxelgrid & occupied, Voxelgrid & autocompleted);
+  IOctreePrediction<2>::Ptr Predict2d(const Voxelgrid & empty, const Voxelgrid & occupied);
 
   StringStringMap GetDebugInfo() {return m_last_debug_info; }
 
@@ -116,9 +118,10 @@ class InformationGainOctreeNBV
                                     const uint64_t accuracy_skip,
                                     const uint64_t sample_fixed_number_of_views);
 
+  template <int DIMS>
   bool GetNextBestView(const Voxelgrid & environment,
                        const Voxelgrid & empty,
-                       const Voxelgrid & autocompleted,
+                       const typename IOctreePrediction<DIMS>::Ptr prediction,
                        const Voxelgrid & occupied,
                        const uint64 max_layers,
                        const Vector3fVector & skip_origins,
@@ -127,9 +130,10 @@ class InformationGainOctreeNBV
                        Eigen::Quaternionf & orientation,
                        ViewWithScoreVector * const all_views_with_score);
 
+  template <int DIMS>
   bool GetNextBestViewFromList(const Voxelgrid & environment,
                                const Voxelgrid & empty,
-                               const Voxelgrid & autocompleted,
+                               const typename IOctreePrediction<DIMS>::Ptr prediction,
                                const Voxelgrid & occupied,
                                const uint64 max_layers,
                                const Vector3fVector & origins,
@@ -166,6 +170,7 @@ class InformationGainOctreeNBV
   template <int DIMS>
   Uint32Vector VoxelgridToSerializedOctree(const Voxelgrid & empty,
                                            const Voxelgrid & occupied,
+                                           const typename IOctreePrediction<DIMS>::Ptr prediction,
                                            const uint64 max_layers);
 
   ros::NodeHandle & m_nh;
