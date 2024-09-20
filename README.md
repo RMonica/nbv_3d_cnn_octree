@@ -39,7 +39,7 @@ The [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine) is an engine f
 
 Please download the source code from the Minkowski Engine [github repository](https://github.com/NVIDIA/MinkowskiEngine). You may want to apply the patch `deps/minkowski.patch` to fix a few issues.
 
-The Minkowski Engine must be built and installed where it can be found by Python. In my installation, it was installed in the folder `nbv_3d_cnn_octree/deps/MinkowskiEngine_install`. Please edit the `PYTHONPATH` environment variable defined in the launch files to point to the correct location in your system.
+The Minkowski Engine must be built and installed where it can be found by Python. In my installation, it was installed in the folder `nbv_3d_cnn_octree/deps/MinkowskiEngine_install`. Edit the `PYTHONPATH` environment variable defined in the launch files to point to the correct location in your system.
 
 **Note**: some code in this repository still references [TorchSparse](https://github.com/mit-han-lab/torchsparse), another sparse tensor engine. I was unable to make this engine work for some reason. The code still attempts to load the engine if present, but it will not be used.
 
@@ -86,26 +86,28 @@ Each launch files starts a `simulate_nbv_cycle` C++ node, which manages the NBV 
 
 Each network node must be configured with the same parameters used for training, and the **checkpoint_file** parameter of each node must point at the file with the trained network parameters. The convention used in the launch files is that the node are named `nbv_3d_cnn_$(arg method)`, where **method** is the name of the network.
 
+Pre-trained network parameters may be downloaded from [here (2D)](http://rimlab.ce.unipr.it/~rmonica/nbv_3d_cnn_octree_pre_trained_2d.zip) and [here (3D)](http://rimlab.ce.unipr.it/~rmonica/nbv_3d_cnn_octree_pre_trained_3d.zip). With the default configuration, these archives should be extracted into the folders `nbv_3d_cnn_octree/data/inria_environments` and `nbv_3d_cnn_octree/data/environments_3d_realistic`, respectively.
+
 **Parameters and arguments**
 
-Interesting arguments of the launch file are:
+Relevant arguments of the launch file are:
 
-- **method**: the name of the network for occupancy prediction. The `simulate_nbv_cycle` node will look for an action named `predict` in the namespace of the node named `nbv_3d_cnn_$(arg method)`. These networks are defined, but more can be added:
+- **method**: the name of the network for occupancy prediction. The `simulate_nbv_cycle` node will look for an action named `predict` in the namespace of the node named `nbv_3d_cnn_$(arg method)`. These networks are defined in the launch file:
     - `enc_dec`: dense encoder-decoder.
     - `sparse_enc_dec_st_loss`: sparse encoder-decoder trained with Structure+Task loss.
     - `sparse_enc_dec_leak05_a09`: sparse encoder-decoder trained with the multi-scale loss.
 - **use_octree_for_prediction**: uses the **method** argument to determine if the network expects an octree or a voxel grid as input.
 - **use_octree_for_nbv**: whether to use an octree for ray casting in the probabilistic NBV method. A voxel grid is used otherwise. This is orthogonal to the network selection: if the network uses octrees and NBV does not (or *vice versa*), conversions will be carried out.
-- **image_file_name**: name of the input environment file. Building this also using the **image_index** argument may be useful.
+- **image_file_name**: name of the input environment file. By default, this is built from the **image_index** argument.
 - **outdir**: path to save the output files. This value is used to build a path relative to folders `nbv_3d_cnn_octree/data/simulate_nbv_cycle` (2D), `nbv_3d_cnn_octree/data/simulate_nbv_cycle_3d_realistic` (3D), `nbv_3d_cnn_octree/data/simulate_nbv_cycle_3d_realistic_large` (3D large).
-- **save_images**: if true, debug images and data are saved in addition to statistics.
+- **save_images**: if true, debug images/voxelgrids and data are saved in addition to statistics.
 
-Interesting parameters in the `simulate_nbv_cycle` node may be also:
+Relevant parameters in the `simulate_nbv_cycle` node may be also:
 
 - **max_iterations**: number of NBV iterations.
 - **nbv_algorithm**: it may be `Random` (selects NBV at random), `OmniscientGain` (selects NBV using the ground truth), `AutocompleteOctreeIGain` (octree-based NBV) and `AutocompleteVoxelgridIGain` (voxelgrid-based NBV).
-- **sample_fixed_number_of_views**: number of viewpoints to sample for NBV.
-- **igain_min_range**, **sensor_range_voxels**: minimum and maximum range (in number of cells).
+- **sample_fixed_number_of_views**: number of viewpoints which are sampled for NBV.
+- **igain_min_range**, **sensor_range_voxels**: minimum and maximum virtual sensor range (in number of cells).
 - **sensor_resolution_y**, **sensor_resolution_x**, **sensor_focal_length**: virtual sensor parameters.
 
-2024-09-19
+2024-09-20
