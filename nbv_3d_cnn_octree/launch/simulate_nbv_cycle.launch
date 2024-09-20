@@ -1,12 +1,11 @@
 <launch>
 
-  <!-- enc_dec sparse_enc_dec_st_loss sparse_enc_dec_leak05_a09_pytorch resnet -->
+  <!-- enc_dec sparse_enc_dec_st_loss sparse_enc_dec_leak05_a09_pytorch -->
   <arg name="method" default="sparse_enc_dec_leak05_a09_pytorch" />
   <arg name="outdir" default="test" />
   <arg name="use_octree_for_nbv" default="true" />
 
   <arg name="image_index" default="179" />
-  <!--<arg name="image_file_name" default="$(find nbv_3d_cnn)/data/inria_environments/$(arg image_index)_environment.png" />-->
   <arg name="image_file_name" default="$(find nbv_3d_cnn_octree)/data/inria_environments_400/$(arg image_index)_environment.png" />
   <arg name="save_images" default="true" />
   <arg name="output_prefix" default="" />

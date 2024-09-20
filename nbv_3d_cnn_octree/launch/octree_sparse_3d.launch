@@ -1,7 +1,7 @@
 <launch>
 
   <!-- enc_dec sparse_enc_dec resnet sparse_resnet -->
-  <arg name="model_type" default="sparse_resnet" />
+  <arg name="model_type" default="sparse_enc_dec" />
   <arg name="outdir" default="test" />
   <!-- engines: pytorch minkowski -->
   <arg name="engine" default="pytorch" />
@@ -57,8 +57,8 @@
     <param name="resblock_num" type="int" value="3" />
 
     <param name="label_hidden_channels" type="int" value="16" />
-    <param name="max_channels" type="int" value="16" if="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />
-    <param name="max_channels" type="int" value="32" unless="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />
+    <param name="max_channels" type="int" value="16" /> <!-- if="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />
+    <param name="max_channels" type="int" value="32" unless="$(eval arg('model_type') == 'resnet' or arg('model_type') == 'sparse_resnet')" />-->
  
     <param name="model_type" type="string" value="$(arg model_type)" />
 

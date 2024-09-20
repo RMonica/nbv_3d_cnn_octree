@@ -1,10 +1,15 @@
 <launch>
 
+  <arg name="output_scene_prefix" value="$(find nbv_3d_cnn_octree)/data/scenes_realistic_large/scene_" />
+  <arg name="objects_per_scene_min" value="36" />
+  <arg name="objects_per_scene_max" value="60" />
+  <arg name="scene_spread" value="0.8" />
+
   <node name="generate_3d_scenes_realistic" type="generate_3d_scenes_realistic" pkg="nbv_3d_cnn" output="screen" clear_params="true">
     <param name="object_folder_prefix" type="string" value="$(find nbv_3d_cnn)/data/rd_dataset/labeled_pointclouds/" />
     <param name="object_folder_list" type="string" value="jugs/jug_ cups/cup_ fourlegs/fourleg_ hammers/hammer_" />
     <param name="object_suffix_list" type="string" value="_annotated.pcd _annotated.pcd _annotated.pcd _annotated.pcd" />
-    <param name="output_scene_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/scenes_realistic/scene_" />
+    <param name="output_scene_prefix" type="string" value="$(arg output_scene_prefix)" />
     
     <param name="indices_explicit_0" type="string" value="1 2 3 4 5 8" />
     <param name="indices_explicit_1" type="string" value="3 4 6 7 8" />
@@ -14,21 +19,20 @@
     <param name="initial_scene_num" type="int" value="1" />
     <param name="max_scenes" type="int" value="120" />
 
-    <param name="objects_per_scene_min" type="int" value="6" />
-    <param name="objects_per_scene_max" type="int" value="10" />
+    <param name="objects_per_scene_min" type="int" value="$(arg objects_per_scene_min)" />
+    <param name="objects_per_scene_max" type="int" value="$(arg objects_per_scene_max)" />
 
     <param name="scene_size" type="int" value="256" />
     <param name="scene_height" type="int" value="192" />
-    <param name="scene_spread" type="double" value="0.4" />
-    <param name="scene_resolution" type="double" value="0.005859375" />
-    <!--<param name="scene_resolution" type="double" value="0.0116" />-->
+    <param name="scene_spread" type="double" value="$(arg scene_spread)" />
+    <param name="scene_resolution" type="double" value="0.0116" />
   </node>
 
   <node name="generate_3d_scenes_realistic_test" type="generate_3d_scenes_realistic" pkg="nbv_3d_cnn" output="screen" clear_params="true">
     <param name="object_folder_prefix" type="string" value="$(find nbv_3d_cnn)/data/rd_dataset/labeled_pointclouds/" />
     <param name="object_folder_list" type="string" value="jugs/jug_ cups/cup_ fourlegs/fourleg_ hammers/hammer_" />
     <param name="object_suffix_list" type="string" value="_annotated.pcd _annotated.pcd _annotated.pcd _annotated.pcd" />
-    <param name="output_scene_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/scenes_realistic/scene_" />
+    <param name="output_scene_prefix" type="string" value="$(arg output_scene_prefix)" />
     
     <param name="indices_explicit_0" type="string" value="6 7" />
     <param name="indices_explicit_1" type="string" value="1 2 5" />
@@ -38,14 +42,13 @@
     <param name="initial_scene_num" type="int" value="121" />
     <param name="max_scenes" type="int" value="180" />
 
-    <param name="objects_per_scene_min" type="int" value="6" />
-    <param name="objects_per_scene_max" type="int" value="10" />
+    <param name="objects_per_scene_min" type="int" value="$(arg objects_per_scene_min)" />
+    <param name="objects_per_scene_max" type="int" value="$(arg objects_per_scene_max)" />
 
     <param name="scene_size" type="int" value="256" />
     <param name="scene_height" type="int" value="192" />
-    <param name="scene_spread" type="double" value="0.4" />
-    <param name="scene_resolution" type="double" value="0.005859375" />
-    <!--<param name="scene_resolution" type="double" value="0.0116" />-->
+    <param name="scene_spread" type="double" value="$(arg scene_spread)" />
+    <param name="scene_resolution" type="double" value="0.0116" />
   </node>
 
 </launch>

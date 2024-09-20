@@ -192,13 +192,16 @@ class PredictAction(object):
       rospy.loginfo('nbv_3d_cnn_octree_predict: action start.')
 
       if not self.model:
+        rospy.loginfo('nbv_3d_cnn_octree_predict: initializing model.')
         self.model = self.init_model()
         self.model.eval()
       if is_octree:
+        rospy.loginfo('nbv_3d_cnn_octree_predict: emptying cache.')
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
 
       if is_octree:
+        rospy.loginfo('nbv_3d_cnn_octree_predict: message to octree input.')
         inputs, masks = self.octree_from_message(goal.empty_and_frontier)
         if inputs is None:
           rospy.logerr('nbv_3d_cnn_octree_predict: could not decode empty_and_frontier octree.')
@@ -213,6 +216,7 @@ class PredictAction(object):
           uninteresting_masks = None
 
       if not is_octree:
+        rospy.loginfo('nbv_3d_cnn_octree_predict: message to image input.')
         sizes = goal.sizes
         if len(sizes) != self.dims:
           rospy.logerr('nbv_3d_cnn_octree_predict: expected %dD image, received %dD.' % (self.dims, len(sizes)))
@@ -244,8 +248,7 @@ class PredictAction(object):
 
       rospy.loginfo('nbv_3d_cnn_predict: prediction in %f s.' % float(prediction_time))
 
-      rospy.loginfo('nbv_3d_cnn_predict: sending result.')
-
+      rospy.loginfo('nbv_3d_cnn_predict: preparing result.')
       if is_octree:
         result = nbv_3d_cnn_octree_msgs.PredictOctreeResult()
         result.octree_scores = self.octree_to_message(outputs, output_masks)
@@ -257,6 +260,7 @@ class PredictAction(object):
       result.total_output_values = int(total_output_values)
       result.memory_allocated = float(torch.cuda.max_memory_allocated() / (1024.0 * 1024.0))
 
+      rospy.loginfo('nbv_3d_cnn_predict: sending result.')
       self.action_server.set_succeeded(result)
 
       rospy.loginfo('nbv_3d_cnn_predict: action succeeded.')

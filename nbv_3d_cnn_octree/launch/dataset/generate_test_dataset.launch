@@ -3,7 +3,7 @@
 
   <node name="generate_test_dataset" type="generate_test_dataset" pkg="nbv_3d_cnn" output="screen" clear_params="true" >
     <param name="source_images_prefix" type="string" value="$(find nbv_3d_cnn)/data/inria_dataset/AerialImageDataset/train/gt/" />
-    <param name="dest_images_prefix" type="string" value="$(find nbv_3d_cnn)/data/inria_environments_lg/" />
+    <param name="dest_images_prefix" type="string" value="$(find nbv_3d_cnn)/data/inria_environments/" />
     <param name="source_image_suffix" type="string" value=".tif" />
 
     <!--<param name="sub_image_width" type="int" value="256" />-->

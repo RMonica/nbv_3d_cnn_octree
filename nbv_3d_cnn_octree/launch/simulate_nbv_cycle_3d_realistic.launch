@@ -8,7 +8,6 @@
   <arg name="engine" default="pytorch" />
 
   <arg name="image_index" default="179" />
-  <!--<arg name="image_file_name" default="$(find nbv_3d_cnn)/data/inria_environments/$(arg image_index)_environment.png" />-->
   <arg name="image_file_name" default="$(find nbv_3d_cnn)/data/scenes_realistic/scene_$(arg image_index).bt" />
   <arg name="save_images" default="true" />
   <arg name="output_prefix" default="" />

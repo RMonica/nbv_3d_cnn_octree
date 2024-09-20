@@ -2,10 +2,10 @@
   <!--launch-prefix="gdb -ex run - -args" -->
 
   <node name="generate_test_dataset" type="generate_test_dataset" pkg="nbv_3d_cnn" output="screen" clear_params="true" >
-    <param name="source_images_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/scenes_realistic/" />
+    <param name="source_images_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/scenes_realistic_large/" />
     <param name="source_image_suffix" type="string" value=".bt" />
 
-    <param name="dest_images_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic2/" />
+    <param name="dest_images_prefix" type="string" value="$(find nbv_3d_cnn_octree)/data/environments_3d_realistic_large_voxelgrids/" />
 
     <!--<param name="sub_image_width" type="int" value="256" />-->
     <param name="environment_resize" type="string" value="1 1" />
@@ -13,6 +13,8 @@
     <param name="sensor_range_voxels" type="double" value="256" />
 
     <param name="accuracy_skip_voxels" type="int" value="8" />
+
+    <param name="save_file_format" type="string" value="octomap" />
 
     <param name="realistic_environment_size" type="string" value="256 256 192" />
 
