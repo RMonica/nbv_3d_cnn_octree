@@ -67,21 +67,6 @@ include_directories(
   ${OCTOMAP_INCLUDE_DIRS}
 )
 
-include_directories(
-  "${CMAKE_CURRENT_SOURCE_DIR}/scripts/o-cnn/octree/octree"
-)
-link_directories(
-  "${CMAKE_CURRENT_SOURCE_DIR}/scripts/o-cnn/octree/build"
-)
-
-add_executable(octree_to_points
-  src/octree_to_points.cpp
-)
-target_link_libraries(octree_to_points
-  ${catkin_LIBRARIES}
-  octree_lib
-)
-
 add_executable(image_to_octree
   src/image_to_octree.cpp
 )
